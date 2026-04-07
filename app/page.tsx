@@ -4,6 +4,7 @@ import { useEffect, useState, useCallback } from "react";
 import Navbar from "@/components/Navbar";
 import Hero from "@/components/Hero";
 import SectionCard from "@/components/SectionCard";
+import CarSchematics from "@/components/CarSchematics";
 import Footer from "@/components/Footer";
 
 interface ReportEvent {
@@ -15,6 +16,7 @@ interface ReportsData {
   total: number;
   events: ReportEvent[];
   synced: boolean;
+  source?: string;
 }
 
 const POLL_INTERVAL = 45_000; // 45 seconds
@@ -44,20 +46,21 @@ export default function Home() {
     return () => clearInterval(interval);
   }, [fetchReportsCount]);
 
-  const statLabel = reportsData.synced
-    ? `reports generated — ${new Date().getFullYear()}`
-    : "reports this year";
-
   return (
     <main className="bg-[#060606] min-h-screen text-white">
       <Navbar />
 
-      {/* ─── Workspace Header ──────────────────── */}
+      {/* ─── Workspace Header ──────────────────────────────────── */}
       <Hero />
 
-      {/* ─── Module Grid ───────────────────────── */}
-      <section className="px-8 md:px-16 pb-24 max-w-[1440px] mx-auto">
-        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5">
+      {/* ─── Module Grid ───────────────────────────────────────── */}
+      <section className="relative overflow-hidden px-8 md:px-16 pb-24 max-w-[1440px] mx-auto">
+
+        {/* Hypercar blueprint schematics — sit behind the cards */}
+        <CarSchematics />
+
+        {/* Cards sit above the schematics */}
+        <div className="relative z-10 grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5">
 
           {/* Reports */}
           <SectionCard
@@ -72,10 +75,11 @@ export default function Home() {
             statusLabel="In Development"
             ctaLabel="Open Reports"
             href="/reports"
-            stat={{
-              value: reportsData.total,
-              label: statLabel,
-            }}
+            stat={
+              reportsData.synced
+                ? { value: reportsData.total, label: `reports — ${new Date().getFullYear()}` }
+                : { value: "—", label: "reports this year" }
+            }
           />
 
           {/* Guides */}
@@ -108,7 +112,7 @@ export default function Home() {
         </div>
 
         {/* Bottom meta row */}
-        <div className="mt-10 flex items-center justify-between">
+        <div className="relative z-10 mt-10 flex items-center justify-between">
           <div className="flex items-center gap-3">
             <div className="w-4 h-px bg-white/10" />
             <span className="text-[9px] tracking-[0.22em] uppercase text-white/20">
@@ -120,13 +124,15 @@ export default function Home() {
               <span className="w-1.5 h-1.5 rounded-full bg-white/30 animate-pulse" />
             )}
             <span className="text-[9px] tracking-[0.22em] uppercase text-white/20">
-              {reportsData.synced ? "OneDrive synced" : "TEN Document Studio v0.1"}
+              {reportsData.synced
+                ? `OneDrive synced · ${reportsData.source}`
+                : "TEN Document Studio v0.1"}
             </span>
           </div>
         </div>
       </section>
 
-      {/* ─── Footer ────────────────────────────── */}
+      {/* ─── Footer ────────────────────────────────────────────── */}
       <Footer />
     </main>
   );

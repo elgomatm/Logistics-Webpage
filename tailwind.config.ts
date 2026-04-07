@@ -19,6 +19,9 @@ const config: Config = {
         "surface-hover": "rgba(255, 255, 255, 0.045)",
         border: "rgba(255, 255, 255, 0.07)",
         "border-bright": "rgba(255, 255, 255, 0.14)",
+        gold: "#C9A96E",
+        "gold-dim": "rgba(201, 169, 110, 0.12)",
+        "gold-glow": "rgba(201, 169, 110, 0.07)",
       },
       backgroundImage: {
         "grid-pattern":

@@ -13,8 +13,8 @@ const config: Config = {
         sans: ['"Inter"', "system-ui", "sans-serif"],
       },
       colors: {
-        accent: "#E05535",
-        "accent-dim": "rgba(224, 85, 53, 0.15)",
+        accent: "#ffffff",
+        "accent-dim": "rgba(255, 255, 255, 0.08)",
         surface: "rgba(255, 255, 255, 0.025)",
         "surface-hover": "rgba(255, 255, 255, 0.045)",
         border: "rgba(255, 255, 255, 0.07)",

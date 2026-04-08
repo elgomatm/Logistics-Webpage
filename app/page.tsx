@@ -13,13 +13,16 @@ interface ReportsData { total: number; events: ReportEvent[]; synced: boolean; s
 const POLL_INTERVAL = 45_000;
 
 export default function Home() {
-  const [reportsData, setReportsData] = useState<ReportsData>({ total: 0, events: [], synced: false });
+  const [reportsData, setReportsData]   = useState<ReportsData>({ total: 0, events: [], synced: false });
+  const [reportsLoading, setReportsLoading] = useState(true);
 
   const fetchReportsCount = useCallback(async () => {
     try {
       const res = await fetch("/api/reports-count", { cache: "no-store" });
       if (res.ok) setReportsData(await res.json());
-    } catch { /* silent */ }
+    } catch { /* silent */ } finally {
+      setReportsLoading(false);
+    }
   }, []);
 
   useEffect(() => {
@@ -60,8 +63,9 @@ export default function Home() {
               status="active" statusLabel="In Development"
               ctaLabel="Open Reports" href="/reports"
               stat={(() => {
-                if (!reportsData.synced) return { value: "—", label: "reports this year" };
                 const yr = String(new Date().getFullYear());
+                if (reportsLoading) return { value: "—", label: `reports — ${yr}`, loading: true };
+                if (!reportsData.synced) return { value: "—", label: "reports this year" };
                 const yearCount = reportsData.events
                   .filter((e) => e.year === yr)
                   .reduce((s, e) => s + e.count, 0);

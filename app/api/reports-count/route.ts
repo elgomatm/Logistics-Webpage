@@ -180,27 +180,52 @@ async function countViaDirectPath(
         driveBase
       );
 
-      // Try Documents/Reports subfolder first, then Documents root, then event root
-      const candidates = [
-        `${edb}/items/${eid}:/Documents/Reports:/children?$select=name,id,file&$top=500`,
-        `${edb}/items/${eid}:/Documents:/children?$select=name,id,file&$top=500`,
-        `${edb}/items/${eid}/children?$select=name,id,file&$top=500`,
-      ];
-
-      for (const url of candidates) {
+      // Check Documents/Reports — and one level deeper in case reports are in a subfolder
+      // (e.g. Lone Star Supercars stores reports in Documents/Reports/pptm/)
+      async function fetchReportFiles(url: string): Promise<string[]> {
         const res: Response = await fetch(url, {
           headers: { Authorization: `Bearer ${token}` },
           cache: "no-store",
         });
-        if (!res.ok) continue;
+        if (!res.ok) return [];
         const data = (await res.json()) as { value?: DriveItem[] };
-        const files = (data?.value ?? [])
-          .filter((f) => f.file && isReport(f.name))
-          .map((f) => f.name);
-        if (files.length > 0) {
-          return { name: event.name, year, count: files.length, files };
+        const items = data?.value ?? [];
+
+        const directFiles = items.filter((f) => f.file && isReport(f.name)).map((f) => f.name);
+
+        // If Reports folder contains subfolders instead of files, scan one level deeper
+        const subFolders = items.filter((f) => f.folder);
+        if (directFiles.length === 0 && subFolders.length > 0) {
+          const nested = await Promise.all(
+            subFolders.map(async (sub) => {
+              const { driveBase: sdb, itemId: sid } = resolveItem(sub, edb);
+              const subRes: Response = await fetch(
+                `${sdb}/items/${sid}/children?$select=name,id,file&$top=500`,
+                { headers: { Authorization: `Bearer ${token}` }, cache: "no-store" }
+              );
+              if (!subRes.ok) return [];
+              const subData = (await subRes.json()) as { value?: DriveItem[] };
+              return (subData?.value ?? []).filter((f) => f.file && isReport(f.name)).map((f) => f.name);
+            })
+          );
+          return nested.flat();
         }
+        return directFiles;
       }
+
+      // Try Documents/Reports first, then Documents root, then event root
+      const reportsUrl = `${edb}/items/${eid}:/Documents/Reports:/children?$select=name,id,file,folder,remoteItem&$top=500`;
+      const fromReports = await fetchReportFiles(reportsUrl);
+      if (fromReports.length > 0) {
+        return { name: event.name, year, count: fromReports.length, files: fromReports };
+      }
+
+      const docsUrl = `${edb}/items/${eid}:/Documents:/children?$select=name,id,file&$top=500`;
+      const fromDocs = await fetchReportFiles(docsUrl);
+      if (fromDocs.length > 0) {
+        return { name: event.name, year, count: fromDocs.length, files: fromDocs };
+      }
+
       return { name: event.name, year, count: 0, files: [] };
     })
   );
@@ -355,9 +380,22 @@ async function scanViaGraph(token: string, userDriveBase: string) {
           if (reportsFolder) {
             const { driveBase: rdb, itemId: rid } = resolveItem(reportsFolder, ddb);
             const rfItems = await graphChildren(token, rdb, rid);
-            reportsFromReportsFolder = rfItems
-              .filter((f) => f.file && isReport(f.name))
-              .map((f) => f.name);
+            const directReports = rfItems.filter((f) => f.file && isReport(f.name)).map((f) => f.name);
+
+            if (directReports.length > 0) {
+              reportsFromReportsFolder = directReports;
+            } else {
+              // Reports folder contains subfolders (e.g. pptm/) — scan one level deeper
+              const subfolders = rfItems.filter((f) => f.folder);
+              const nested = await Promise.all(
+                subfolders.map(async (sub) => {
+                  const { driveBase: sdb, itemId: sid } = resolveItem(sub, rdb);
+                  const subItems = await graphChildren(token, sdb, sid);
+                  return subItems.filter((f) => f.file && isReport(f.name)).map((f) => f.name);
+                })
+              );
+              reportsFromReportsFolder = nested.flat();
+            }
           }
         }
 

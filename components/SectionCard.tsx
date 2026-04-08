@@ -5,7 +5,7 @@ import { motion, useMotionValue, useTransform, useSpring } from "framer-motion";
 import { ArrowRight, Lock } from "lucide-react";
 import Link from "next/link";
 
-interface StatBlock { value: number | string; label: string; }
+interface StatBlock { value: number | string; label: string; loading?: boolean; }
 
 interface ModuleCardProps {
   id: string;
@@ -130,9 +130,29 @@ export default function SectionCard({
             animate={hovered ? { x: 2 } : { x: 0 }}
             transition={{ type: "spring", stiffness: 300, damping: 20 }}
           >
-            <span className="font-bebas text-[36px] leading-none tracking-wider" style={{ color: "var(--champagne)" }}>
-              {stat.value}
-            </span>
+            {stat.loading ? (
+              /* Spinning arc while count is loading */
+              <svg
+                width="32" height="32" viewBox="0 0 32 32"
+                style={{ color: "var(--champagne)", flexShrink: 0 }}
+              >
+                <motion.circle
+                  cx="16" cy="16" r="12"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2.5"
+                  strokeLinecap="round"
+                  strokeDasharray="40 36"
+                  animate={{ rotate: 360 }}
+                  transition={{ duration: 1.1, repeat: Infinity, ease: "linear" }}
+                  style={{ originX: "16px", originY: "16px" }}
+                />
+              </svg>
+            ) : (
+              <span className="font-bebas text-[36px] leading-none tracking-wider" style={{ color: "var(--champagne)" }}>
+                {stat.value}
+              </span>
+            )}
             <span className="text-[9px] tracking-[0.18em] uppercase" style={{ color: "var(--text-3)" }}>
               {stat.label}
             </span>

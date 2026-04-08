@@ -97,7 +97,12 @@ async function findTENFolder(
     headers: { Authorization: `Bearer ${token}` },
     cache: "no-store",
   });
-  if (!rootRes.ok) return null;
+  console.log("[findTEN] root/children status:", rootRes.status);
+  if (!rootRes.ok) {
+    const errText = await rootRes.text();
+    console.log("[findTEN] root/children FAILED:", errText.slice(0, 300));
+    return null;
+  }
   const rootData = await rootRes.json();
   const rootItems = (rootData?.value ?? []) as DriveItem[];
 
@@ -287,12 +292,19 @@ async function countViaSearch(
         const parentPath = item.parentReference?.path ?? "";
         const pathLower = parentPath.toLowerCase();
 
-        // Only include files that live inside the TEN/Events folder tree.
-        // This prevents personal files (bank statements, resumes, etc.)
-        // from showing up when the search falls back to a drive-wide scan.
-        const isInTEN = pathLower.includes("/ten/") && pathLower.includes("/events/");
+        if (isReport(item.name)) {
+          // Log every report-like file with its path so we can verify filtering
+          console.log("[search] found:", item.name, "| path:", parentPath);
+        }
 
-        if (!seenIds.has(item.id) && isReport(item.name) && isInTEN) {
+        // TEN files live on a SharePoint drive — when Graph returns them via search,
+        // the path looks like /drives/{id}/root:/Events/2026/EventName/...
+        // "TEN" is the library root and does NOT appear in the path string.
+        // Filter: require a 20XX year segment in the path — personal files like
+        // insurance PDFs and bank statements won't have this structure.
+        const hasYear = /\/20\d{2}\//.test(parentPath);
+
+        if (!seenIds.has(item.id) && isReport(item.name) && hasYear) {
           seenIds.add(item.id);
           allFiles.push({
             name: item.name,
@@ -571,26 +583,44 @@ export async function GET() {
 
     // ── Helper: try all strategies with a given token ────────────────────────
     async function tryWithToken(token: string, label: string) {
+      // Strategy A: search me/drive (personal OneDrive + synced SharePoint)
+      console.log(`[reports-count] [${label}] trying search on me/drive...`);
+      const searchResult = await countViaSearch(token, DRIVE_BASE);
+      if (searchResult && searchResult.total > 0) {
+        console.log(`[reports-count] [${label}] me/drive search SUCCESS:`, searchResult.total, "files");
+        return NextResponse.json({ ...searchResult, source: `${label}_search` }, { headers: NO_CACHE });
+      }
+      console.log(`[reports-count] [${label}] me/drive search returned 0, trying all drives...`);
+
+      // Strategy B: enumerate all drives (finds the SharePoint org drive where TEN lives)
+      const drivesRes = await fetch(`https://graph.microsoft.com/v1.0/me/drives`, {
+        headers: { Authorization: `Bearer ${token}` },
+        cache: "no-store",
+      });
+      if (drivesRes.ok) {
+        const drivesData = await drivesRes.json() as { value?: Array<{ id: string; name: string; driveType: string }> };
+        const drives = drivesData?.value ?? [];
+        console.log(`[reports-count] [${label}] drives found:`, drives.map((d) => `${d.name}(${d.driveType})`));
+
+        for (const drive of drives) {
+          const driveBase = `https://graph.microsoft.com/v1.0/drives/${drive.id}`;
+          console.log(`[reports-count] [${label}] searching drive: ${drive.name}`);
+          const driveSearch = await countViaSearch(token, driveBase);
+          if (driveSearch && driveSearch.total > 0) {
+            console.log(`[reports-count] [${label}] drive ${drive.name} SUCCESS:`, driveSearch.total, "files");
+            return NextResponse.json({ ...driveSearch, source: `${label}_drive_${drive.name}` }, { headers: NO_CACHE });
+          }
+        }
+      }
+
+      // Strategy C: direct path on me/drive
       console.log(`[reports-count] [${label}] trying direct path...`);
       const directResult = await countViaDirectPath(token, currentYear);
       if (directResult) {
         console.log(`[reports-count] [${label}] direct path SUCCESS:`, directResult.total, "files");
         return NextResponse.json({ ...directResult, source: `${label}_direct` }, { headers: NO_CACHE });
       }
-      console.log(`[reports-count] [${label}] direct path failed, trying folder walk...`);
 
-      const folderResult = await scanViaGraph(token, DRIVE_BASE);
-      if (folderResult) {
-        console.log(`[reports-count] [${label}] folder walk SUCCESS:`, folderResult.total, "files");
-        return NextResponse.json({ ...folderResult, source: label }, { headers: NO_CACHE });
-      }
-      console.log(`[reports-count] [${label}] folder walk failed, trying search...`);
-
-      const searchResult = await countViaSearch(token, DRIVE_BASE);
-      if (searchResult) {
-        console.log(`[reports-count] [${label}] search SUCCESS:`, searchResult.total, "files (TEN/Events only)");
-        return NextResponse.json({ ...searchResult, source: `${label}_search` }, { headers: NO_CACHE });
-      }
       console.log(`[reports-count] [${label}] ALL strategies failed`);
       return null;
     }

@@ -1,136 +1,150 @@
+/**
+ * /api/reports-debug
+ * Full diagnostic — checks every possible way to reach the TEN folder
+ */
 import { NextResponse } from "next/server";
 import { auth } from "@/auth";
 
-export async function GET() {
-  const session = await auth();
-  const results: Record<string, unknown> = {};
+async function graphGet(token: string, url: string) {
+  const res = await fetch(url, {
+    headers: { Authorization: `Bearer ${token}` },
+    cache: "no-store",
+  });
+  const body = await res.json();
+  return { status: res.status, body };
+}
 
-  // 1. Check session
-  results.session = {
-    hasSession: !!session,
-    hasAccessToken: !!session?.accessToken,
-    user: session?.user?.email ?? null,
-  };
-
-  // 2. Try Graph with session token — list drive root children
-  if (session?.accessToken) {
-    try {
-      // List root children to find TEN (works for regular folders AND shortcuts/remoteItems)
-      const rootRes = await fetch(
-        "https://graph.microsoft.com/v1.0/me/drive/root/children?$select=name,id,folder,remoteItem&$top=100",
-        { headers: { Authorization: `Bearer ${session.accessToken}` }, cache: "no-store" }
-      );
-      const rootBody = await rootRes.json();
-      const rootItems = rootBody?.value ?? [];
-
-      results.driveRoot = {
-        status: rootRes.status,
-        folders: rootItems
-          .filter((i: {folder?: unknown}) => i.folder)
-          .map((i: {name: string; remoteItem?: unknown}) => ({
-            name: i.name,
-            isShortcut: !!i.remoteItem,
-          })),
-      };
-
-      // Find TEN specifically
-      const tenItem = rootItems.find(
-        (i: {name: string}) => i.name.toLowerCase() === "ten"
-      );
-
-      if (tenItem) {
-        results.tenFound = {
-          name: tenItem.name,
-          isShortcut: !!tenItem.remoteItem,
-          remoteInfo: tenItem.remoteItem
-            ? {
-                id: tenItem.remoteItem.id,
-                driveId: tenItem.remoteItem.parentReference?.driveId ?? tenItem.remoteItem.driveId,
-              }
-            : null,
-          localId: tenItem.id,
-        };
-
-        // Try to list Events inside TEN
-        let eventsUrl: string;
-        if (tenItem.remoteItem) {
-          const driveId =
-            tenItem.remoteItem.parentReference?.driveId ?? tenItem.remoteItem.driveId;
-          const itemId = tenItem.remoteItem.id;
-          eventsUrl = `https://graph.microsoft.com/v1.0/drives/${driveId}/items/${itemId}/children?$select=name,folder&$top=50`;
-        } else {
-          eventsUrl = `https://graph.microsoft.com/v1.0/me/drive/items/${tenItem.id}/children?$select=name,folder&$top=50`;
-        }
-
-        const tenChildren = await fetch(eventsUrl, {
-          headers: { Authorization: `Bearer ${session.accessToken}` },
-          cache: "no-store",
-        });
-        const tenBody = await tenChildren.json();
-
-        results.tenChildren = {
-          status: tenChildren.status,
-          folders: (tenBody?.value ?? [])
-            .filter((i: {folder?: unknown}) => i.folder)
-            .map((i: {name: string}) => i.name),
-        };
-      } else {
-        results.tenFound = null;
-
-        // Try a search
-        const searchRes = await fetch(
-          "https://graph.microsoft.com/v1.0/me/drive/root/search(q='TEN')?$select=name,id,folder,remoteItem&$top=20",
-          { headers: { Authorization: `Bearer ${session.accessToken}` }, cache: "no-store" }
-        );
-        const searchBody = await searchRes.json();
-        results.tenSearch = {
-          status: searchRes.status,
-          results: (searchBody?.value ?? []).map((i: {name: string; folder?: unknown; remoteItem?: unknown}) => ({
-            name: i.name,
-            isFolder: !!i.folder,
-            isShortcut: !!i.remoteItem,
-          })),
-        };
-      }
-    } catch (e) {
-      results.graphError = String(e);
-    }
-  }
-
-  // 3. Check env vars (masked)
-  results.envVars = {
-    AZURE_CLIENT_ID: !!process.env.AZURE_CLIENT_ID,
-    AZURE_CLIENT_SECRET: !!process.env.AZURE_CLIENT_SECRET,
-    AZURE_TENANT_ID: !!process.env.AZURE_TENANT_ID,
-    ONEDRIVE_USER_EMAIL: process.env.ONEDRIVE_USER_EMAIL ?? "NOT SET",
-    AUTH_SECRET: !!process.env.AUTH_SECRET,
-    NEXTAUTH_URL: process.env.NEXTAUTH_URL ?? "NOT SET",
-  };
-
-  // 4. Try app-creds token
+async function getRefreshToken(): Promise<string | null> {
+  const rt = process.env.ONEDRIVE_REFRESH_TOKEN;
   const { AZURE_TENANT_ID, AZURE_CLIENT_ID, AZURE_CLIENT_SECRET } = process.env;
-  if (AZURE_TENANT_ID && AZURE_CLIENT_ID && AZURE_CLIENT_SECRET) {
-    try {
-      const tr = await fetch(
-        `https://login.microsoftonline.com/${AZURE_TENANT_ID}/oauth2/v2.0/token`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/x-www-form-urlencoded" },
-          body: new URLSearchParams({
-            client_id: AZURE_CLIENT_ID,
-            client_secret: AZURE_CLIENT_SECRET,
-            scope: "https://graph.microsoft.com/.default",
-            grant_type: "client_credentials",
-          }),
-          cache: "no-store",
-        }
-      );
-      const td = await tr.json();
-      results.appToken = { obtained: !!td.access_token, error: td.error ?? null };
-    } catch (e) {
-      results.appToken = { error: String(e) };
+  if (!rt || !AZURE_TENANT_ID || !AZURE_CLIENT_ID || !AZURE_CLIENT_SECRET) return null;
+  const res = await fetch(
+    `https://login.microsoftonline.com/${AZURE_TENANT_ID}/oauth2/v2.0/token`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams({
+        client_id: AZURE_CLIENT_ID,
+        client_secret: AZURE_CLIENT_SECRET,
+        grant_type: "refresh_token",
+        refresh_token: rt,
+        scope: "https://graph.microsoft.com/Files.Read offline_access",
+      }),
+      cache: "no-store",
     }
+  );
+  const data = await res.json();
+  return data.access_token ?? null;
+}
+
+export async function GET() {
+  const out: Record<string, unknown> = {};
+
+  // ── 1. Env check ────────────────────────────────────────────────────────────
+  out.env = {
+    hasRefreshToken: !!process.env.ONEDRIVE_REFRESH_TOKEN,
+    hasClientId:     !!process.env.AZURE_CLIENT_ID,
+    hasClientSecret: !!process.env.AZURE_CLIENT_SECRET,
+    hasTenantId:     !!process.env.AZURE_TENANT_ID,
+  };
+
+  // ── 2. Get a token (refresh token preferred, fall back to session) ──────────
+  let token: string | null = null;
+  let tokenSource = "none";
+
+  const refreshToken = await getRefreshToken();
+  if (refreshToken) { token = refreshToken; tokenSource = "refresh_token"; }
+
+  if (!token) {
+    const session = await auth();
+    if (session?.accessToken) { token = session.accessToken; tokenSource = "session"; }
   }
 
-  return NextResponse.json(results, { headers: { "Cache-Control": "no-store" } });
+  out.tokenSource = tokenSource;
+  if (!token) {
+    out.error = "No token available — sign in or set ONEDRIVE_REFRESH_TOKEN in Vercel";
+    return NextResponse.json(out);
+  }
+
+  // ── 3. Who am I? ────────────────────────────────────────────────────────────
+  const me = await graphGet(token, "https://graph.microsoft.com/v1.0/me?$select=displayName,mail,userPrincipalName");
+  out.me = me.body;
+
+  // ── 4. List ALL drives this user can access ─────────────────────────────────
+  const drives = await graphGet(token, "https://graph.microsoft.com/v1.0/me/drives?$select=id,name,driveType,webUrl");
+  out.allDrives = (drives.body?.value ?? []).map((d: {id:string;name:string;driveType:string;webUrl:string}) => ({
+    id: d.id, name: d.name, driveType: d.driveType, webUrl: d.webUrl,
+  }));
+
+  // ── 5. Root children of main drive ─────────────────────────────────────────
+  const rootChildren = await graphGet(
+    token,
+    "https://graph.microsoft.com/v1.0/me/drive/root/children?$select=name,id,folder,remoteItem&$top=200"
+  );
+  const rootItems = rootChildren.body?.value ?? [];
+  out.driveRootFolders = rootItems
+    .filter((i: {folder?: unknown}) => i.folder)
+    .map((i: {name:string; remoteItem?: {id:string; parentReference?: {driveId:string}}}) => ({
+      name: i.name,
+      isShortcut: !!i.remoteItem,
+      remoteItemId: i.remoteItem?.id,
+      remoteDriveId: i.remoteItem?.parentReference?.driveId,
+    }));
+
+  // ── 6. Specifically look for TEN ───────────────────────────────────────────
+  const tenItem = rootItems.find((i: {name:string}) =>
+    i.name.toLowerCase() === "ten"
+  );
+  out.tenInRoot = tenItem ? {
+    found: true,
+    name: tenItem.name,
+    isShortcut: !!tenItem.remoteItem,
+    remoteItemId: tenItem.remoteItem?.id,
+    remoteDriveId: tenItem.remoteItem?.parentReference?.driveId,
+  } : { found: false };
+
+  // ── 7. Try sharedWithMe ────────────────────────────────────────────────────
+  const shared = await graphGet(
+    token,
+    "https://graph.microsoft.com/v1.0/me/drive/sharedWithMe?$select=name,id,folder,remoteItem&$top=100"
+  );
+  const sharedItems = shared.body?.value ?? [];
+  out.sharedWithMe = sharedItems
+    .filter((i: {folder?: unknown}) => i.folder)
+    .map((i: {name:string; remoteItem?: {id:string; parentReference?: {driveId:string}}}) => ({
+      name: i.name,
+      isShortcut: !!i.remoteItem,
+      remoteItemId: i.remoteItem?.id,
+      remoteDriveId: i.remoteItem?.parentReference?.driveId,
+    }));
+
+  // ── 8. Search the entire drive for "TEN" ──────────────────────────────────
+  const search = await graphGet(
+    token,
+    "https://graph.microsoft.com/v1.0/me/drive/root/search(q='TEN')?$select=name,id,folder,parentReference&$top=20"
+  );
+  out.searchForTEN = (search.body?.value ?? [])
+    .filter((i: {folder?: unknown}) => i.folder)
+    .map((i: {name:string; id:string; parentReference?: {path:string; driveId:string}}) => ({
+      name: i.name,
+      id: i.id,
+      parentPath: i.parentReference?.path,
+      parentDriveId: i.parentReference?.driveId,
+    }));
+
+  // ── 9. Search for .pptx files directly ────────────────────────────────────
+  const pptxSearch = await graphGet(
+    token,
+    "https://graph.microsoft.com/v1.0/me/drive/root/search(q='.pptx')?$select=name,id,parentReference&$top=10"
+  );
+  out.pptxSearchSample = {
+    status: pptxSearch.status,
+    count: pptxSearch.body?.value?.length ?? 0,
+    sample: (pptxSearch.body?.value ?? []).slice(0, 3).map((i: {name:string; parentReference?: {path:string}}) => ({
+      name: i.name,
+      path: i.parentReference?.path,
+    })),
+  };
+
+  return NextResponse.json(out, { headers: { "Cache-Control": "no-store" } });
 }

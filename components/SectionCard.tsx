@@ -20,12 +20,13 @@ interface ModuleCardProps {
   onCta?: () => void;
   index: number;
   stat?: StatBlock;
+  previewImages?: string[]; // stacked image display
 }
 
 export default function SectionCard({
   id, number, title, subtitle, description, tags,
   status, statusLabel, ctaLabel = "Open Module",
-  href, onCta, index, stat,
+  href, onCta, index, stat, previewImages,
 }: ModuleCardProps) {
   const isActive = status === "active";
 
@@ -80,6 +81,51 @@ export default function SectionCard({
           </div>
         )}
       </div>
+
+      {/* ── Stacked preview images ────────────────────────────── */}
+      {previewImages && previewImages.length > 0 && (
+        <div
+          className="relative flex items-center justify-center overflow-hidden"
+          style={{
+            height: "168px",
+            background: "linear-gradient(to bottom, rgba(0,0,0,0.015), rgba(0,0,0,0.03))",
+            borderBottom: "1px solid var(--border)",
+          }}
+        >
+          {previewImages.map((src, i) => {
+            const total = previewImages.length;
+            const mid = (total - 1) / 2;
+            const offset = (i - mid) * 22; // horizontal spread
+            const depth = Math.abs(i - mid);
+            const zIndex = total - depth;
+            const scale = 1 - depth * 0.055;
+            const verticalOffset = depth * 6; // back images sink slightly
+
+            return (
+              <div
+                key={src}
+                className="absolute"
+                style={{
+                  transform: `translateX(${offset}px) translateY(${verticalOffset}px) scale(${scale})`,
+                  zIndex,
+                  width: "110px",
+                  borderRadius: "6px",
+                  overflow: "hidden",
+                  boxShadow: `0 ${4 + depth * 4}px ${16 + depth * 12}px rgba(0,0,0,${0.14 + depth * 0.06})`,
+                  border: "1px solid rgba(255,255,255,0.6)",
+                }}
+              >
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src={src}
+                  alt=""
+                  style={{ width: "100%", height: "auto", display: "block" }}
+                />
+              </div>
+            );
+          })}
+        </div>
+      )}
 
       {/* ── Body ─────────────────────────────────────────────── */}
       <div className="px-6 py-5 flex-1 flex flex-col justify-between gap-5">

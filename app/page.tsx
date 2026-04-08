@@ -62,6 +62,11 @@ export default function Home() {
                   ? { value: reportsData.total, label: `reports — ${new Date().getFullYear()}` }
                   : { value: "—", label: "reports this year" }
               }
+              previewImages={[
+                "/report-covers/cover-1.jpg",
+                "/report-covers/cover-2.jpg",
+                "/report-covers/cover-3.jpg",
+              ]}
             />
 
             <SectionCard

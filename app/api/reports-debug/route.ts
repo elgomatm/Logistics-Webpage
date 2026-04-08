@@ -12,17 +12,88 @@ export async function GET() {
     user: session?.user?.email ?? null,
   };
 
-  // 2. Try Graph with session token
+  // 2. Try Graph with session token — list drive root children
   if (session?.accessToken) {
     try {
-      const r = await fetch(
-        "https://graph.microsoft.com/v1.0/me/drive/root:/TEN/Events:/children?$select=name,folder&$top=10",
+      // List root children to find TEN (works for regular folders AND shortcuts/remoteItems)
+      const rootRes = await fetch(
+        "https://graph.microsoft.com/v1.0/me/drive/root/children?$select=name,id,folder,remoteItem&$top=100",
         { headers: { Authorization: `Bearer ${session.accessToken}` }, cache: "no-store" }
       );
-      const body = await r.json();
-      results.graphDelegated = { status: r.status, value: body?.value?.map((i: {name:string}) => i.name) ?? body };
+      const rootBody = await rootRes.json();
+      const rootItems = rootBody?.value ?? [];
+
+      results.driveRoot = {
+        status: rootRes.status,
+        folders: rootItems
+          .filter((i: {folder?: unknown}) => i.folder)
+          .map((i: {name: string; remoteItem?: unknown}) => ({
+            name: i.name,
+            isShortcut: !!i.remoteItem,
+          })),
+      };
+
+      // Find TEN specifically
+      const tenItem = rootItems.find(
+        (i: {name: string}) => i.name.toLowerCase() === "ten"
+      );
+
+      if (tenItem) {
+        results.tenFound = {
+          name: tenItem.name,
+          isShortcut: !!tenItem.remoteItem,
+          remoteInfo: tenItem.remoteItem
+            ? {
+                id: tenItem.remoteItem.id,
+                driveId: tenItem.remoteItem.parentReference?.driveId ?? tenItem.remoteItem.driveId,
+              }
+            : null,
+          localId: tenItem.id,
+        };
+
+        // Try to list Events inside TEN
+        let eventsUrl: string;
+        if (tenItem.remoteItem) {
+          const driveId =
+            tenItem.remoteItem.parentReference?.driveId ?? tenItem.remoteItem.driveId;
+          const itemId = tenItem.remoteItem.id;
+          eventsUrl = `https://graph.microsoft.com/v1.0/drives/${driveId}/items/${itemId}/children?$select=name,folder&$top=50`;
+        } else {
+          eventsUrl = `https://graph.microsoft.com/v1.0/me/drive/items/${tenItem.id}/children?$select=name,folder&$top=50`;
+        }
+
+        const tenChildren = await fetch(eventsUrl, {
+          headers: { Authorization: `Bearer ${session.accessToken}` },
+          cache: "no-store",
+        });
+        const tenBody = await tenChildren.json();
+
+        results.tenChildren = {
+          status: tenChildren.status,
+          folders: (tenBody?.value ?? [])
+            .filter((i: {folder?: unknown}) => i.folder)
+            .map((i: {name: string}) => i.name),
+        };
+      } else {
+        results.tenFound = null;
+
+        // Try a search
+        const searchRes = await fetch(
+          "https://graph.microsoft.com/v1.0/me/drive/root/search(q='TEN')?$select=name,id,folder,remoteItem&$top=20",
+          { headers: { Authorization: `Bearer ${session.accessToken}` }, cache: "no-store" }
+        );
+        const searchBody = await searchRes.json();
+        results.tenSearch = {
+          status: searchRes.status,
+          results: (searchBody?.value ?? []).map((i: {name: string; folder?: unknown; remoteItem?: unknown}) => ({
+            name: i.name,
+            isFolder: !!i.folder,
+            isShortcut: !!i.remoteItem,
+          })),
+        };
+      }
     } catch (e) {
-      results.graphDelegated = { error: String(e) };
+      results.graphError = String(e);
     }
   }
 
@@ -56,16 +127,6 @@ export async function GET() {
       );
       const td = await tr.json();
       results.appToken = { obtained: !!td.access_token, error: td.error ?? null };
-
-      if (td.access_token && process.env.ONEDRIVE_USER_EMAIL) {
-        const userId = encodeURIComponent(process.env.ONEDRIVE_USER_EMAIL);
-        const fr = await fetch(
-          `https://graph.microsoft.com/v1.0/users/${userId}/drive/root:/TEN/Events:/children?$select=name,folder&$top=10`,
-          { headers: { Authorization: `Bearer ${td.access_token}` }, cache: "no-store" }
-        );
-        const fb = await fr.json();
-        results.graphAppCreds = { status: fr.status, value: fb?.value?.map((i: {name:string}) => i.name) ?? fb };
-      }
     } catch (e) {
       results.appToken = { error: String(e) };
     }

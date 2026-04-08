@@ -87,7 +87,7 @@ export default function SectionCard({
         <div
           className="relative flex items-center justify-center overflow-hidden"
           style={{
-            height: "200px",
+            height: "220px",
             background: "linear-gradient(to bottom, rgba(0,0,0,0.015), rgba(0,0,0,0.03))",
             borderBottom: "1px solid var(--border)",
           }}
@@ -95,11 +95,11 @@ export default function SectionCard({
           {previewImages.map((src, i) => {
             const total = previewImages.length;
             const mid = (total - 1) / 2;
-            const offset = (i - mid) * 58; // horizontal spread
+            const offset = (i - mid) * 76; // ~half the image width visible behind front
             const depth = Math.abs(i - mid);
             const zIndex = total - depth;
-            const scale = 1 - depth * 0.06;
-            const verticalOffset = depth * 8;
+            const scale = 1 - depth * 0.04;
+            const verticalOffset = depth * 6;
 
             return (
               <div
@@ -108,7 +108,7 @@ export default function SectionCard({
                 style={{
                   transform: `translateX(${offset}px) translateY(${verticalOffset}px) scale(${scale})`,
                   zIndex,
-                  width: "130px",
+                  width: "152px",
                   borderRadius: "6px",
                   overflow: "hidden",
                   boxShadow: `0 ${4 + depth * 4}px ${16 + depth * 12}px rgba(0,0,0,${0.14 + depth * 0.06})`,

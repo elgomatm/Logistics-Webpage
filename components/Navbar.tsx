@@ -69,7 +69,7 @@ export default function Navbar() {
           {/* Left — wordmark, navigates home */}
           <button
             onClick={() => router.push("/")}
-            className="flex items-center gap-3 group"
+            className="flex items-center gap-2.5 group"
           >
             <span
               className="font-bebas text-[22px] tracking-[0.18em] leading-none select-none"
@@ -77,13 +77,20 @@ export default function Navbar() {
             >
               TEN
             </span>
-            <div className="h-4 w-px" style={{ background: "var(--border-mid)" }} />
-            <span
-              className="text-[10px] tracking-[0.22em] uppercase font-medium hidden sm:block"
-              style={{ color: "var(--text-2)" }}
-            >
-              Document Studio
-            </span>
+            <div className="flex flex-col items-start justify-center hidden sm:flex" style={{ gap: "1px" }}>
+              <span
+                className="text-[7px] tracking-[0.28em] uppercase font-medium leading-none"
+                style={{ color: "var(--text-3)" }}
+              >
+                The Exotics Network
+              </span>
+              <span
+                className="text-[11px] tracking-[0.18em] uppercase font-semibold leading-none"
+                style={{ color: "var(--text-1)" }}
+              >
+                Document Studio
+              </span>
+            </div>
           </button>
 
           {/* Desktop nav */}

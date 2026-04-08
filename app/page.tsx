@@ -93,11 +93,11 @@ export default function Home() {
             />
 
             <SectionCard
-              index={2} id="analytics" number="03" title="ANALYTICS"
-              subtitle="OneDrive Intelligence"
-              description="A live dashboard for your connected OneDrive. Monitor total storage, track the folders consuming the most space, break down file types, and surface usage trends across the TEN document library."
-              tags={["Storage Usage", "File Breakdown", "Top Folders", "Live Sync"]}
-              status="planned" statusLabel="Coming Soon"
+              index={2} id="emails" number="03" title="EMAILS & WORKFLOWS"
+              subtitle="Automated Outreach"
+              description="Build and send partner outreach, follow-ups, and event announcements. Automate sequences, personalise at scale, and track opens and replies — all from inside Document Studio."
+              tags={["Partner Emails", "Templates", "Sequences", "Automations"]}
+              status="planned" statusLabel="Planned"
               ctaLabel="Coming Soon"
             />
           </div>

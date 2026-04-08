@@ -2,6 +2,11 @@ import NextAuth from "next-auth";
 import MicrosoftEntraID from "next-auth/providers/microsoft-entra-id";
 
 export const { handlers, auth, signIn, signOut } = NextAuth({
+  // Force the callback URL to always use the stable production domain.
+  // Without this, Vercel uses the per-deployment preview URL which doesn't
+  // match what's registered in Azure, causing AADSTS50011.
+  trustHost: true,
+
   providers: [
     MicrosoftEntraID({
       clientId: process.env.AZURE_CLIENT_ID!,

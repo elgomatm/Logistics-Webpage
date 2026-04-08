@@ -7,7 +7,7 @@ import { useRouter, usePathname } from "next/navigation";
 import Image from "next/image";
 
 const navItems = [
-  { label: "Reports",   href: "#reports",   page: false },
+  { label: "Home",      href: "/",          page: true  },
   { label: "Analytics", href: "/analytics", page: true  },
   { label: "Settings",  href: "/settings",  page: true  },
 ];
@@ -66,9 +66,9 @@ export default function Navbar() {
       >
         <div className="max-w-[1360px] mx-auto px-6 md:px-14 h-16 flex items-center justify-between">
 
-          {/* Left — wordmark only, no logo image */}
+          {/* Left — wordmark, navigates home */}
           <button
-            onClick={() => window.scrollTo({ top: 0, behavior: "smooth" })}
+            onClick={() => router.push("/")}
             className="flex items-center gap-3 group"
           >
             <span
@@ -110,13 +110,6 @@ export default function Navbar() {
                 </button>
               );
             })}
-
-            <span
-              className="text-[9px] tracking-[0.18em] uppercase px-2 py-1 rounded-full border"
-              style={{ color: "var(--text-2)", borderColor: "var(--border-mid)" }}
-            >
-              v0.1
-            </span>
 
             {/* User */}
             {session?.user && (

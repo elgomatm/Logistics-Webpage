@@ -9,6 +9,7 @@
  */
 
 import { NextResponse } from "next/server";
+import { unstable_cache } from "next/cache";
 import { auth } from "@/auth";
 
 async function getToken(): Promise<{ token?: string; error?: string }> {
@@ -42,11 +43,19 @@ async function getToken(): Promise<{ token?: string; error?: string }> {
 async function graphGet(token: string, url: string) {
   const res = await fetch(url, {
     headers: { Authorization: `Bearer ${token}` },
-    cache: "no-store",
   });
   if (!res.ok) return null;
   return res.json();
 }
+
+// ── Cached data fetcher (10-minute TTL) ───────────────────────
+const fetchAnalyticsData = unstable_cache(
+  async (token: string) => {
+    return _fetchAnalyticsData(token);
+  },
+  ["onedrive-analytics-data"],
+  { revalidate: 600 } // 10 minutes
+);
 
 function formatBytes(bytes: number) {
   if (bytes >= 1e9) return `${(bytes / 1e9).toFixed(2)} GB`;
@@ -64,12 +73,8 @@ type DriveItemRaw = {
   parentReference?: { driveId?: string };
 };
 
-export async function GET() {
-  const { token, error } = await getToken();
-  if (!token) {
-    return NextResponse.json({ error: error ?? "not authenticated" }, { status: 401 });
-  }
-
+// ── Core data fetcher (called by unstable_cache) ─────────────
+async function _fetchAnalyticsData(token: string) {
   // ── 1. Personal drive quota ───────────────────────────────────
   const driveInfo = await graphGet(token, "https://graph.microsoft.com/v1.0/me/drive?$select=quota,id");
   const quota = driveInfo?.quota ?? null;
@@ -84,7 +89,6 @@ export async function GET() {
     body: JSON.stringify({
       requests: [{ entityTypes: ["driveItem"], query: { queryString: "TEN" }, fields: ["name", "id", "parentReference"], from: 0, size: 25 }],
     }),
-    cache: "no-store",
   });
   if (searchRes.ok) {
     const sd = await searchRes.json();
@@ -185,43 +189,53 @@ export async function GET() {
     .map(([ext, { count, bytes }]) => ({ ext, count, bytes, formattedSize: formatBytes(bytes) }))
     .sort((a, b) => b.bytes - a.bytes);
 
-  return NextResponse.json(
-    {
-      personalQuota: quota
-        ? {
-            used: quota.used ?? 0,
-            remaining: quota.remaining ?? 0,
-            total: quota.total ?? 0,
-            usedFormatted: formatBytes(quota.used ?? 0),
-            remainingFormatted: formatBytes(quota.remaining ?? 0),
-            totalFormatted: formatBytes(quota.total ?? 0),
-            usedPercent: quota.total ? Math.round((quota.used / quota.total) * 100) : 0,
-          }
-        : null,
-      tenDrive: tenDriveInfo
-        ? {
-            name: tenDriveInfo.name,
-            driveType: tenDriveInfo.driveType,
-            quota: tenDriveInfo.quota
-              ? {
-                  used: tenDriveInfo.quota.used ?? 0,
-                  remaining: tenDriveInfo.quota.remaining ?? 0,
-                  total: tenDriveInfo.quota.total ?? 0,
-                  usedFormatted: formatBytes(tenDriveInfo.quota.used ?? 0),
-                  remainingFormatted: formatBytes(tenDriveInfo.quota.remaining ?? 0),
-                  totalFormatted: formatBytes(tenDriveInfo.quota.total ?? 0),
-                  usedPercent: tenDriveInfo.quota.total
-                    ? Math.round((tenDriveInfo.quota.used / tenDriveInfo.quota.total) * 100)
-                    : 0,
-                }
-              : null,
-          }
-        : null,
-      eventFolders,
-      topPersonalFolders: topFolders,
-      fileTypeBreakdown,
-      year: currentYear,
-    },
-    { headers: { "Cache-Control": "no-store" } }
-  );
+  return {
+    personalQuota: quota
+      ? {
+          used: quota.used ?? 0,
+          remaining: quota.remaining ?? 0,
+          total: quota.total ?? 0,
+          usedFormatted: formatBytes(quota.used ?? 0),
+          remainingFormatted: formatBytes(quota.remaining ?? 0),
+          totalFormatted: formatBytes(quota.total ?? 0),
+          usedPercent: quota.total ? Math.round((quota.used / quota.total) * 100) : 0,
+        }
+      : null,
+    tenDrive: tenDriveInfo
+      ? {
+          name: tenDriveInfo.name,
+          driveType: tenDriveInfo.driveType,
+          quota: tenDriveInfo.quota
+            ? {
+                used: tenDriveInfo.quota.used ?? 0,
+                remaining: tenDriveInfo.quota.remaining ?? 0,
+                total: tenDriveInfo.quota.total ?? 0,
+                usedFormatted: formatBytes(tenDriveInfo.quota.used ?? 0),
+                remainingFormatted: formatBytes(tenDriveInfo.quota.remaining ?? 0),
+                totalFormatted: formatBytes(tenDriveInfo.quota.total ?? 0),
+                usedPercent: tenDriveInfo.quota.total
+                  ? Math.round((tenDriveInfo.quota.used / tenDriveInfo.quota.total) * 100)
+                  : 0,
+              }
+            : null,
+        }
+      : null,
+    eventFolders,
+    topPersonalFolders: topFolders,
+    fileTypeBreakdown,
+    year: currentYear,
+  };
+}
+
+// ── Route handler ─────────────────────────────────────────────
+export async function GET() {
+  const { token, error } = await getToken();
+  if (!token) {
+    return NextResponse.json({ error: error ?? "not authenticated" }, { status: 401 });
+  }
+
+  const data = await fetchAnalyticsData(token);
+  return NextResponse.json(data, {
+    headers: { "Cache-Control": "s-maxage=600, stale-while-revalidate=1800" },
+  });
 }

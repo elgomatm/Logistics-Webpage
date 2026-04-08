@@ -34,11 +34,11 @@ export default function SectionCard({
   const cardRef = useRef<HTMLDivElement>(null);
   const [hovered, setHovered] = useState(false);
 
-  // Mouse-tracking tilt
+  // Mouse-tracking tilt — tight spring = no lag
   const mouseX = useMotionValue(0);
   const mouseY = useMotionValue(0);
-  const rotateX = useSpring(useTransform(mouseY, [-0.5, 0.5], [4, -4]), { stiffness: 300, damping: 30 });
-  const rotateY = useSpring(useTransform(mouseX, [-0.5, 0.5], [-5, 5]), { stiffness: 300, damping: 30 });
+  const rotateX = useSpring(useTransform(mouseY, [-0.5, 0.5], [3, -3]), { stiffness: 500, damping: 45, mass: 0.4 });
+  const rotateY = useSpring(useTransform(mouseX, [-0.5, 0.5], [-4, 4]), { stiffness: 500, damping: 45, mass: 0.4 });
   const glowX   = useTransform(mouseX, [-0.5, 0.5], ["0%", "100%"]);
   const glowY   = useTransform(mouseY, [-0.5, 0.5], ["0%", "100%"]);
 
@@ -96,7 +96,7 @@ export default function SectionCard({
           {/* Number — bold champagne gold */}
           <motion.span
             className="font-bebas text-[52px] leading-none tracking-widest select-none"
-            style={{ color: isActive ? "var(--champagne)" : "rgba(0,0,0,0.08)" }}
+            style={{ color: isActive ? "var(--champagne)" : "rgba(201,169,110,0.35)" }}
             animate={hovered && isActive ? { scale: 1.05, y: -2 } : { scale: 1, y: 0 }}
             transition={{ type: "spring", stiffness: 400, damping: 20 }}
           >
@@ -195,7 +195,7 @@ export default function SectionCard({
                 }}
               >
                 {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src={src} alt="" style={{ width: "100%", height: "190px", objectFit: "cover", display: "block" }} />
+                <img src={src} alt="" style={{ width: "100%", height: "190px", objectFit: "contain", display: "block", background: "transparent" }} />
               </motion.div>
             );
           })}

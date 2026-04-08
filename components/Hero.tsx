@@ -1,7 +1,6 @@
 "use client";
 
 import { motion } from "framer-motion";
-import Image from "next/image";
 
 export default function WorkspaceHeader() {
   return (
@@ -12,35 +11,29 @@ export default function WorkspaceHeader() {
         transition={{ duration: 0.7, ease: [0.16, 1, 0.3, 1], delay: 0.15 }}
         className="flex flex-col md:flex-row md:items-end justify-between gap-6"
       >
-        {/* Left — Logo block */}
+        {/* Left — wordmark */}
         <div>
-          {/* TEN logo — inverted to black for light background */}
-          <div className="mb-3 select-none" style={{ width: "clamp(180px, 22vw, 300px)" }}>
-            <Image
-              src="/ten-logo.png"
-              alt="The Exotics Network"
-              width={1000}
-              height={349}
-              priority
-              style={{
-                width: "100%",
-                height: "auto",
-                filter: "invert(1)",
-                opacity: 0.88,
-              }}
-            />
-          </div>
-
-          {/* Eyebrow — sits right under the logo */}
-          <div className="flex items-center gap-3">
+          <h1
+            className="font-bebas tracking-[0.12em] leading-none select-none"
+            style={{
+              fontSize: "clamp(52px, 6vw, 88px)",
+              color: "var(--text-1)",
+            }}
+          >
+            Document Studio
+          </h1>
+          <div className="flex items-center gap-3 mt-2">
             <div className="w-5 h-px" style={{ background: "var(--border-mid)" }} />
-            <span className="text-[10px] tracking-[0.28em] uppercase font-medium" style={{ color: "var(--text-3)" }}>
+            <span
+              className="text-[10px] tracking-[0.28em] uppercase font-medium"
+              style={{ color: "var(--text-3)" }}
+            >
               The Exotics Network
             </span>
           </div>
         </div>
 
-        {/* Right — Meta */}
+        {/* Right — meta */}
         <div className="flex items-center gap-6 shrink-0">
           <div className="text-right hidden md:block">
             <div className="text-[9px] tracking-[0.22em] uppercase mb-1" style={{ color: "var(--text-3)" }}>

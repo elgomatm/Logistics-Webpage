@@ -5,6 +5,7 @@ import Navbar from "@/components/Navbar";
 import Hero from "@/components/Hero";
 import SectionCard from "@/components/SectionCard";
 import Footer from "@/components/Footer";
+import LoginSuccessAnimation from "@/components/LoginSuccessAnimation";
 
 interface ReportEvent { name: string; count: number; }
 interface ReportsData { total: number; events: ReportEvent[]; synced: boolean; source?: string; }
@@ -29,6 +30,7 @@ export default function Home() {
 
   return (
     <main className="min-h-screen" style={{ background: "var(--bg)" }}>
+      <LoginSuccessAnimation />
 
       {/* ── Champagne ambient glow — top center ───────────────── */}
       <div

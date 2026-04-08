@@ -106,9 +106,9 @@ async function scanViaGraph(token: string, driveBase: string) {
           .filter((f) => f.file && isReport(f.name))
           .map((f) => f.name);
 
-        const files = [
-          ...new Set([...reportsFromRoot, ...reportsFromDocs, ...reportsFromReportsFolder]),
-        ];
+        const files = Array.from(
+          new Set(reportsFromRoot.concat(reportsFromDocs, reportsFromReportsFolder))
+        );
 
         allEventResults.push({ name: eventName, year, count: files.length, files });
       })

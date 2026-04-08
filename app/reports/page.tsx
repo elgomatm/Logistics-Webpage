@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import Link from "next/link";
 import {
@@ -111,6 +111,14 @@ const slideVariants = {
 };
 
 // ─── Individual step content ───────────────────────────────────
+// Known events — always shown as fallback if OneDrive isn't connected
+const KNOWN_REPORTS = [
+  "Lone Star Supercars 2026 — COTA.pptx",
+  "Supercars & Superyachts 2025.pptx",
+  "Scottsdale Grand Tour 2025.pptx",
+  "Exotics & Elegance 2025.pptx",
+];
+
 function StepContent({ stepIndex }: { stepIndex: number }) {
   const [partners, setPartners] = useState(MOCK_PARTNERS);
   const [addingPartner, setAddingPartner] = useState(false);
@@ -118,6 +126,28 @@ function StepContent({ stepIndex }: { stepIndex: number }) {
   const [coverPreview, setCoverPreview] = useState<string | null>(null);
   const [headerPreview, setHeaderPreview] = useState<string | null>(null);
   const [photoCount, setPhotoCount] = useState(0);
+  const [liveReports, setLiveReports] = useState<string[]>([]);
+
+  // Fetch real report filenames from OneDrive
+  useEffect(() => {
+    fetch("/api/reports-count")
+      .then((r) => r.json())
+      .then((data) => {
+        if (data?.events?.length) {
+          // Flatten all files across all events into a unique sorted list
+          const files: string[] = [];
+          for (const event of data.events) {
+            if (event.files?.length) files.push(...event.files);
+          }
+          const unique = Array.from(new Set(files)).sort((a, b) => b.localeCompare(a));
+          if (unique.length > 0) setLiveReports(unique);
+        }
+      })
+      .catch(() => {/* use fallback */});
+  }, []);
+
+  // Use live data if available, otherwise fall back to known list
+  const reportOptions = liveReports.length > 0 ? liveReports : KNOWN_REPORTS;
   const coverInputRef = useRef<HTMLInputElement>(null);
   const headerInputRef = useRef<HTMLInputElement>(null);
   const photoInputRef = useRef<HTMLInputElement>(null);
@@ -167,9 +197,9 @@ function StepContent({ stepIndex }: { stepIndex: number }) {
           <div className="relative">
             <select className="input-field pr-10 w-full">
               <option value="">Choose existing report to clone…</option>
-              <option>Lone Star Supercars 2026 — COTA.pptx</option>
-              <option>Scottsdale Grand Tour 2025.pptx</option>
-              <option>Exotics &amp; Elegance 2025.pptx</option>
+              {reportOptions.map((name) => (
+                <option key={name} value={name}>{name}</option>
+              ))}
             </select>
           </div>
           <p className="text-[10px] text-white/20 mt-1">

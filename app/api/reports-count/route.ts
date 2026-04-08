@@ -118,10 +118,10 @@ async function scanViaSearch(token: string, driveBase: string) {
     entry.files.push(f.name);
   }
 
-  const events = [...byEvent.values()].sort((a, b) =>
+  const events = Array.from(byEvent.values()).sort((a, b) =>
     b.year.localeCompare(a.year) || a.name.localeCompare(b.name)
   );
-  const years = [...yearSet].sort((a, b) => b.localeCompare(a));
+  const years = Array.from(yearSet).sort((a, b) => b.localeCompare(a));
   const total = events.reduce((s, e) => s + e.count, 0);
 
   return { total, events, years, synced: true, source: "graph-search" };

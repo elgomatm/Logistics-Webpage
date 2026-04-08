@@ -101,12 +101,15 @@ async function findTENFolder(
   const rootData = await rootRes.json();
   const rootItems = (rootData?.value ?? []) as DriveItem[];
 
+  console.log("[findTEN] root items:", rootItems.map((i) => `${i.name}(${i.folder ? "folder" : "file"}${i.remoteItem ? "/remote" : ""})`));
   const tenItem = rootItems.find((i) => i.name.toLowerCase() === "ten");
   if (tenItem) {
+    console.log("[findTEN] found TEN in root:", tenItem.name, tenItem.remoteItem ? "(shortcut)" : "(folder)");
     return resolveItem(tenItem, userDriveBase);
   }
 
   // 2. If not in root, search for it
+  console.log("[findTEN] TEN not in root, searching...");
   const searchUrl = `${userDriveBase}/root/search(q='TEN')?$select=name,id,folder,remoteItem&$top=50`;
   const searchRes = await fetch(searchUrl, {
     headers: { Authorization: `Bearer ${token}` },
@@ -115,13 +118,17 @@ async function findTENFolder(
   if (searchRes.ok) {
     const searchData = await searchRes.json();
     const searchItems = (searchData?.value ?? []) as DriveItem[];
-    // Find a folder named exactly "TEN"
+    console.log("[findTEN] search results:", searchItems.map((i) => i.name));
     const exactMatch = searchItems.find(
       (i) => i.name === "TEN" && i.folder
     );
-    if (exactMatch) return resolveItem(exactMatch, userDriveBase);
+    if (exactMatch) {
+      console.log("[findTEN] found TEN via search");
+      return resolveItem(exactMatch, userDriveBase);
+    }
   }
 
+  console.log("[findTEN] FAILED - TEN not found anywhere");
   return null;
 }
 
@@ -162,15 +169,25 @@ async function countViaDirectPath(
   // Step 1: list all event folders under TEN/Events/{year}
   const eventsUrl =
     `${driveBase}/root:/TEN/Events/${year}:/children?$select=name,id,folder,remoteItem&$top=500`;
+  console.log("[direct_path] fetching events url:", eventsUrl);
   const eventsRes: Response = await fetch(eventsUrl, {
     headers: { Authorization: `Bearer ${token}` },
     cache: "no-store",
   });
-  if (!eventsRes.ok) return null;
+  console.log("[direct_path] events response status:", eventsRes.status);
+  if (!eventsRes.ok) {
+    const errText = await eventsRes.text();
+    console.log("[direct_path] FAILED - response body:", errText.slice(0, 500));
+    return null;
+  }
 
   const eventsData = (await eventsRes.json()) as { value?: DriveItem[] };
   const eventFolders = (eventsData?.value ?? []).filter((i) => i.folder);
-  if (eventFolders.length === 0) return null;
+  console.log("[direct_path] event folders found:", eventFolders.map((f) => f.name));
+  if (eventFolders.length === 0) {
+    console.log("[direct_path] FAILED - no event folders under TEN/Events/" + year);
+    return null;
+  }
 
   // Step 2: for each event, count .pptx/.pdf files in Documents/Reports
   const results = await Promise.all(
@@ -216,16 +233,19 @@ async function countViaDirectPath(
       // Try Documents/Reports first, then Documents root, then event root
       const reportsUrl = `${edb}/items/${eid}:/Documents/Reports:/children?$select=name,id,file,folder,remoteItem&$top=500`;
       const fromReports = await fetchReportFiles(reportsUrl);
+      console.log(`[direct_path] ${event.name} -> Documents/Reports: ${fromReports.length} files`, fromReports);
       if (fromReports.length > 0) {
         return { name: event.name, year, count: fromReports.length, files: fromReports };
       }
 
       const docsUrl = `${edb}/items/${eid}:/Documents:/children?$select=name,id,file&$top=500`;
       const fromDocs = await fetchReportFiles(docsUrl);
+      console.log(`[direct_path] ${event.name} -> Documents: ${fromDocs.length} files`, fromDocs);
       if (fromDocs.length > 0) {
         return { name: event.name, year, count: fromDocs.length, files: fromDocs };
       }
 
+      console.log(`[direct_path] ${event.name} -> 0 reports found anywhere`);
       return { name: event.name, year, count: 0, files: [] };
     })
   );
@@ -267,12 +287,12 @@ async function countViaSearch(
         const parentPath = item.parentReference?.path ?? "";
         const pathLower = parentPath.toLowerCase();
 
-        // ⚠️  Only count files that live inside a "Reports" folder.
+        // Only include files that live inside the TEN/Events folder tree.
         // This prevents personal files (bank statements, resumes, etc.)
-        // from contaminating the count when TEN isn't reachable by direct path.
-        const isInReportsFolder = pathLower.includes("/reports");
+        // from showing up when the search falls back to a drive-wide scan.
+        const isInTEN = pathLower.includes("/ten/") && pathLower.includes("/events/");
 
-        if (!seenIds.has(item.id) && isReport(item.name) && isInReportsFolder) {
+        if (!seenIds.has(item.id) && isReport(item.name) && isInTEN) {
           seenIds.add(item.id);
           allFiles.push({
             name: item.name,
@@ -536,47 +556,70 @@ export async function GET() {
     const NO_CACHE = { "Cache-Control": "no-store" };
 
     const currentYear = new Date().getFullYear().toString();
+    console.log("[reports-count] ===== START =====", { currentYear, NODE_ENV: process.env.NODE_ENV });
+
+    // ── Strategy 0: local filesystem — use first in dev (always accurate) ────
+    if (process.env.NODE_ENV !== "production") {
+      console.log("[reports-count] trying filesystem first (dev mode)");
+      const fsResult = countViaFilesystem();
+      if (fsResult) {
+        console.log("[reports-count] filesystem SUCCESS:", fsResult.total, "total files");
+        return NextResponse.json(fsResult, { headers: NO_CACHE });
+      }
+      console.log("[reports-count] filesystem not available, falling through to Graph API");
+    }
 
     // ── Helper: try all strategies with a given token ────────────────────────
     async function tryWithToken(token: string, label: string) {
-      // Attempt 1: direct path (TEN/Events/2026/event/Documents/Reports) — fastest
+      console.log(`[reports-count] [${label}] trying direct path...`);
       const directResult = await countViaDirectPath(token, currentYear);
       if (directResult) {
+        console.log(`[reports-count] [${label}] direct path SUCCESS:`, directResult.total, "files");
         return NextResponse.json({ ...directResult, source: `${label}_direct` }, { headers: NO_CACHE });
       }
-      // Attempt 2: structured folder walk (TEN → Events → Year → Event)
+      console.log(`[reports-count] [${label}] direct path failed, trying folder walk...`);
+
       const folderResult = await scanViaGraph(token, DRIVE_BASE);
       if (folderResult) {
+        console.log(`[reports-count] [${label}] folder walk SUCCESS:`, folderResult.total, "files");
         return NextResponse.json({ ...folderResult, source: label }, { headers: NO_CACHE });
       }
-      // Attempt 3: drive-wide search (works when TEN isn't reachable by path)
+      console.log(`[reports-count] [${label}] folder walk failed, trying search...`);
+
       const searchResult = await countViaSearch(token, DRIVE_BASE);
       if (searchResult) {
+        console.log(`[reports-count] [${label}] search SUCCESS:`, searchResult.total, "files (TEN/Events only)");
         return NextResponse.json({ ...searchResult, source: `${label}_search` }, { headers: NO_CACHE });
       }
+      console.log(`[reports-count] [${label}] ALL strategies failed`);
       return null;
     }
 
-    // ── Strategy 1: stored refresh token (24/7, no active session needed) ───
-    // Refresh token stored as ONEDRIVE_REFRESH_TOKEN in Vercel env vars.
-    // If you see source:"session*" instead of "refresh_token*", the stored
-    // token has rotated — visit /api/setup-token and update Vercel.
+    // ── Strategy 1: stored refresh token ─────────────────────────────────────
+    const hasRefreshToken = !!process.env.ONEDRIVE_REFRESH_TOKEN;
+    console.log("[reports-count] ONEDRIVE_REFRESH_TOKEN present:", hasRefreshToken);
     const rtResult = await getAccessTokenFromRefreshToken();
+    if (rtResult?.error) console.log("[reports-count] refresh token exchange error:", rtResult.error);
     if (rtResult?.token) {
+      console.log("[reports-count] got access token from refresh token, trying...");
       const res = await tryWithToken(rtResult.token, "refresh_token");
       if (res) return res;
+    } else {
+      console.log("[reports-count] no token from refresh token exchange, skipping");
     }
 
-    // ── Strategy 2: active user session (works when Malook is signed in) ────
+    // ── Strategy 2: active user session ──────────────────────────────────────
     const session = await auth();
+    console.log("[reports-count] session present:", !!session, "| accessToken present:", !!session?.accessToken);
     if (session?.accessToken) {
       const res = await tryWithToken(session.accessToken, "session");
       if (res) return res;
     }
 
-    // ── Strategy 3: app credentials (requires admin consent — not yet granted) ─
+    // ── Strategy 3: app credentials ───────────────────────────────────────────
     const appToken = await getAppGraphToken();
     const userId = process.env.ONEDRIVE_USER_EMAIL;
+    console.log("[reports-count] app token present:", !!appToken, "| ONEDRIVE_USER_EMAIL:", userId ?? "NOT SET");
     if (appToken && userId) {
       const result = await scanViaGraph(
         appToken,
@@ -585,12 +628,15 @@ export async function GET() {
       if (result) return NextResponse.json(result, { headers: NO_CACHE });
     }
 
-    // ── Strategy 4: local filesystem (dev only) ──────────────────────────────
+    // ── Strategy 4: local filesystem (last resort) ────────────────────────────
     const fsResult = countViaFilesystem();
-    if (fsResult) return NextResponse.json(fsResult, { headers: NO_CACHE });
+    if (fsResult) {
+      console.log("[reports-count] filesystem fallback SUCCESS:", fsResult.total);
+      return NextResponse.json(fsResult, { headers: NO_CACHE });
+    }
 
-    // Surface refresh token error if that's why we got here
-    const rtError = rtResult && "error" in rtResult ? rtResult.error : undefined;
+    const rtError = rtResult?.error;
+    console.log("[reports-count] ===== ALL STRATEGIES FAILED =====", { rtError });
     return NextResponse.json(
       {
         total: 0, events: [], years: [], synced: false, source: "none",
@@ -600,6 +646,7 @@ export async function GET() {
       { headers: NO_CACHE }
     );
   } catch (err) {
+    console.log("[reports-count] UNCAUGHT ERROR:", err);
     return NextResponse.json(
       { total: 0, events: [], years: [], synced: false, error: String(err) },
       { status: 500, headers: { "Cache-Control": "no-store" } }

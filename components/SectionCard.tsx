@@ -195,7 +195,7 @@ export default function SectionCard({
                 }}
               >
                 {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src={src} alt="" style={{ width: "100%", height: "auto", display: "block" }} />
+                <img src={src} alt="" style={{ width: "100%", height: "190px", objectFit: "cover", display: "block" }} />
               </motion.div>
             );
           })}

@@ -175,15 +175,14 @@ export default function SectionCard({
                   width: "152px",
                   borderRadius: "6px",
                   overflow: "hidden",
-                  boxShadow: `0 ${4 + depth * 4}px ${16 + depth * 12}px rgba(0,0,0,${0.14 + depth * 0.06})`,
-                  border: "1px solid rgba(255,255,255,0.6)",
+                  boxShadow: `0 ${4 + depth * 4}px ${16 + depth * 12}px rgba(0,0,0,${0.18 + depth * 0.08})`,
                 }}
               >
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img
                   src={src}
                   alt=""
-                  style={{ width: "100%", height: "190px", objectFit: "contain", display: "block" }}
+                  style={{ width: "100%", height: "190px", objectFit: "cover", display: "block" }}
                 />
               </div>
             );

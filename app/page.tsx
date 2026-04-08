@@ -99,6 +99,11 @@ export default function Home() {
               tags={["Partner Emails", "Templates", "Sequences", "Automations"]}
               status="planned" statusLabel="Planned"
               ctaLabel="Coming Soon"
+              previewImages={[
+                "/email-covers/cover-1.jpg",
+                "/email-covers/cover-2.jpg",
+                "/email-covers/cover-3.jpg",
+              ]}
             />
           </div>
 

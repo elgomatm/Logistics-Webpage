@@ -85,7 +85,6 @@ export default function Navbar() {
                   height={52}
                   priority
                   style={{
-                    mixBlendMode: "screen",
                     height: "22px",
                     width: "auto",
                     opacity: 0.9,

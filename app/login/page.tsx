@@ -50,7 +50,7 @@ export default function LoginPage() {
         transition={{ duration: 0.75, ease: [0.16, 1, 0.3, 1] }}
         className="relative z-10 flex flex-col items-center w-full max-w-[420px] px-8"
       >
-        {/* TEN Logo — mix-blend-mode:screen makes black transparent */}
+        {/* TEN Logo — RGBA PNG, already transparent background */}
         <div className="mb-8 w-48 select-none">
           <Image
             src="/ten-logo.png"
@@ -58,7 +58,7 @@ export default function LoginPage() {
             width={480}
             height={206}
             priority
-            style={{ mixBlendMode: "screen", width: "100%", height: "auto" }}
+            style={{ width: "100%", height: "auto" }}
           />
         </div>
 

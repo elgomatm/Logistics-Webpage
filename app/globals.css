@@ -7,12 +7,12 @@
   --bg:          #f5f5f7;
   --surface:     #ffffff;
   --text-1:      #1d1d1f;
-  --text-2:      #6e6e73;
-  --text-3:      #aeaeb2;
-  --border:      rgba(0,0,0,0.07);
-  --border-mid:  rgba(0,0,0,0.10);
-  --champagne:   #8a6420;
-  --champ-rgb:   138,100,32;
+  --text-2:      #1d1d1f;
+  --text-3:      #3a3a3c;
+  --border:      rgba(0,0,0,0.09);
+  --border-mid:  rgba(0,0,0,0.13);
+  --champagne:   #7a5010;
+  --champ-rgb:   122,80,16;
   --font-bebas:  "Bebas Neue", sans-serif;
   --font-inter:  "Inter", system-ui, sans-serif;
 }

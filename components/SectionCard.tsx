@@ -4,10 +4,7 @@ import { motion } from "framer-motion";
 import { ArrowRight, Lock } from "lucide-react";
 import Link from "next/link";
 
-interface StatBlock {
-  value: number | string;
-  label: string;
-}
+interface StatBlock { value: number | string; label: string; }
 
 interface ModuleCardProps {
   id: string;
@@ -26,138 +23,95 @@ interface ModuleCardProps {
 }
 
 export default function SectionCard({
-  id,
-  number,
-  title,
-  subtitle,
-  description,
-  tags,
-  status,
-  statusLabel,
-  ctaLabel = "Open Module",
-  href,
-  onCta,
-  index,
-  stat,
+  id, number, title, subtitle, description, tags,
+  status, statusLabel, ctaLabel = "Open Module",
+  href, onCta, index, stat,
 }: ModuleCardProps) {
   const isActive = status === "active";
 
   return (
     <motion.div
       id={id}
-      initial={{ opacity: 0, y: 28 }}
+      initial={{ opacity: 0, y: 24 }}
       whileInView={{ opacity: 1, y: 0 }}
-      viewport={{ once: true, margin: "-50px" }}
-      transition={{
-        duration: 0.65,
-        ease: [0.16, 1, 0.3, 1],
-        delay: index * 0.1,
-      }}
+      viewport={{ once: true, margin: "-40px" }}
+      transition={{ duration: 0.6, ease: [0.16, 1, 0.3, 1], delay: index * 0.08 }}
       className={`module-card ${isActive ? "module-card-active" : ""} flex flex-col h-full`}
     >
-      {/* Card header */}
-      <div className="px-7 pt-7 pb-6 border-b border-white/[0.06]">
-        <div className="flex items-start justify-between gap-4 mb-4">
-          {/* Module number — large ghosted */}
+      {/* ── Header ───────────────────────────────────────────── */}
+      <div className="px-6 pt-6 pb-4" style={{ borderBottom: "1px solid var(--border)" }}>
+        <div className="flex items-start justify-between gap-3 mb-3">
           <span
-            className="font-bebas text-[52px] leading-none tracking-widest select-none"
-            style={{ color: isActive ? "rgba(255,255,255,0.08)" : "rgba(255,255,255,0.04)" }}
+            className="font-bebas text-[44px] leading-none tracking-widest select-none"
+            style={{ color: isActive ? "rgba(201,169,110,0.18)" : "rgba(0,0,0,0.05)" }}
           >
             {number}
           </span>
-
-          {/* Status badge */}
-          {isActive ? (
-            <span className="badge-active mt-2 shrink-0">{statusLabel}</span>
-          ) : (
-            <span className="badge-planned mt-2 shrink-0">{statusLabel}</span>
-          )}
+          {isActive
+            ? <span className="badge-active mt-1 shrink-0">{statusLabel}</span>
+            : <span className="badge-planned mt-1 shrink-0">{statusLabel}</span>}
         </div>
 
-        {/* Title */}
         <h2
           className="font-bebas tracking-wide leading-none"
           style={{
-            fontSize: "clamp(32px, 2.8vw, 44px)",
-            color: isActive ? "rgba(255,255,255,0.90)" : "rgba(255,255,255,0.22)",
+            fontSize: "clamp(28px, 2.4vw, 38px)",
+            color: isActive ? "var(--text-1)" : "var(--text-3)",
           }}
         >
           {title}
         </h2>
 
-        {/* Subtitle */}
-        <p
-          className="text-[9px] tracking-[0.22em] uppercase mt-2"
-          style={{ color: isActive ? "rgba(255,255,255,0.28)" : "rgba(255,255,255,0.1)" }}
-        >
+        <p className="text-[9px] tracking-[0.22em] uppercase mt-1.5"
+          style={{ color: isActive ? "var(--text-2)" : "var(--text-3)" }}>
           {subtitle}
         </p>
 
-        {/* Live stat (optional) */}
+        {/* Live stat */}
         {stat && isActive && (
-          <div className="mt-4 flex items-baseline gap-2">
-            <span className="font-bebas text-[36px] leading-none text-white/80 tracking-wider">
+          <div className="mt-3 flex items-baseline gap-2">
+            <span className="font-bebas text-[32px] leading-none tracking-wider" style={{ color: "var(--champagne)" }}>
               {stat.value}
             </span>
-            <span className="text-[9px] tracking-[0.18em] uppercase text-white/25">
+            <span className="text-[9px] tracking-[0.18em] uppercase" style={{ color: "var(--text-3)" }}>
               {stat.label}
             </span>
           </div>
         )}
       </div>
 
-      {/* Card body */}
-      <div className="px-7 py-6 flex-1 flex flex-col justify-between gap-7">
-        {/* Description */}
-        <p
-          className="text-[13px] leading-[1.75]"
-          style={{ color: isActive ? "rgba(255,255,255,0.42)" : "rgba(255,255,255,0.16)" }}
-        >
+      {/* ── Body ─────────────────────────────────────────────── */}
+      <div className="px-6 py-5 flex-1 flex flex-col justify-between gap-5">
+        <p className="text-[12.5px] leading-[1.7]" style={{ color: isActive ? "var(--text-2)" : "var(--text-3)" }}>
           {description}
         </p>
 
-        <div className="space-y-5">
+        <div className="space-y-4">
           {/* Tags */}
-          <div className="flex flex-wrap gap-2">
+          <div className="flex flex-wrap gap-1.5">
             {tags.map((tag) => (
-              <span
-                key={tag}
-                className="tag"
+              <span key={tag} className="tag"
                 style={{
-                  borderColor: isActive ? "rgba(255,255,255,0.09)" : "rgba(255,255,255,0.04)",
-                  color: isActive ? "rgba(255,255,255,0.28)" : "rgba(255,255,255,0.1)",
-                }}
-              >
+                  borderColor: isActive ? "var(--border-mid)" : "var(--border)",
+                  color: isActive ? "var(--text-2)" : "var(--text-3)",
+                  background: isActive ? "rgba(0,0,0,0.03)" : "transparent",
+                }}>
                 {tag}
               </span>
             ))}
           </div>
 
-          {/* CTA — link or button */}
+          {/* CTA */}
           {isActive ? (
             href ? (
-              <Link
-                href={href}
-                className="btn-primary w-full justify-center group"
-              >
+              <Link href={href} className="btn-primary w-full justify-center group">
                 {ctaLabel}
-                <ArrowRight
-                  size={12}
-                  strokeWidth={2}
-                  className="transition-transform group-hover:translate-x-0.5"
-                />
+                <ArrowRight size={11} strokeWidth={2} className="transition-transform group-hover:translate-x-0.5" />
               </Link>
             ) : (
-              <button
-                onClick={onCta}
-                className="btn-primary w-full justify-center group"
-              >
+              <button onClick={onCta} className="btn-primary w-full justify-center group">
                 {ctaLabel}
-                <ArrowRight
-                  size={12}
-                  strokeWidth={2}
-                  className="transition-transform group-hover:translate-x-0.5"
-                />
+                <ArrowRight size={11} strokeWidth={2} className="transition-transform group-hover:translate-x-0.5" />
               </button>
             )
           ) : (

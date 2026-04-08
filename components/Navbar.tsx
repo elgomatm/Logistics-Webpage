@@ -7,54 +7,42 @@ import Image from "next/image";
 
 const navItems = [
   { label: "Reports", href: "#reports" },
-  { label: "Guides", href: "#guides" },
-  { label: "Emails", href: "#emails" },
+  { label: "Guides",  href: "#guides"  },
+  { label: "Emails",  href: "#emails"  },
 ];
 
 export default function Navbar() {
-  const [scrolled, setScrolled] = useState(false);
-  const [activeSection, setActiveSection] = useState("");
-  const [menuOpen, setMenuOpen] = useState(false);
-  const { data: session } = useSession();
+  const [scrolled, setScrolled]     = useState(false);
+  const [activeSection, setActive]  = useState("");
+  const [menuOpen, setMenuOpen]     = useState(false);
+  const { data: session }           = useSession();
 
   useEffect(() => {
     const onScroll = () => {
       setScrolled(window.scrollY > 40);
-
-      // Track active section
       const sections = ["reports", "guides", "emails"];
-      for (const id of sections.reverse()) {
+      for (const id of [...sections].reverse()) {
         const el = document.getElementById(id);
-        if (el && window.scrollY >= el.offsetTop - 120) {
-          setActiveSection(id);
-          return;
-        }
+        if (el && window.scrollY >= el.offsetTop - 120) { setActive(id); return; }
       }
-      setActiveSection("");
+      setActive("");
     };
-
     window.addEventListener("scroll", onScroll, { passive: true });
     return () => window.removeEventListener("scroll", onScroll);
   }, []);
 
   const scrollTo = (href: string) => {
     setMenuOpen(false);
-    const id = href.replace("#", "");
-    document.getElementById(id)?.scrollIntoView({ behavior: "smooth" });
+    document.getElementById(href.replace("#", ""))?.scrollIntoView({ behavior: "smooth" });
   };
 
-  // Get initials from name or email
   const getInitials = () => {
     const name = session?.user?.name;
-    const email = session?.user?.email;
     if (name) {
       const parts = name.trim().split(" ");
-      return parts.length >= 2
-        ? (parts[0][0] + parts[parts.length - 1][0]).toUpperCase()
-        : parts[0][0].toUpperCase();
+      return parts.length >= 2 ? (parts[0][0] + parts[parts.length - 1][0]).toUpperCase() : parts[0][0].toUpperCase();
     }
-    if (email) return email[0].toUpperCase();
-    return "?";
+    return session?.user?.email?.[0]?.toUpperCase() ?? "?";
   };
 
   const displayName = session?.user?.name?.split(" ")[0] ?? session?.user?.email ?? "";
@@ -65,102 +53,80 @@ export default function Navbar() {
         initial={{ y: -80, opacity: 0 }}
         animate={{ y: 0, opacity: 1 }}
         transition={{ duration: 0.7, ease: [0.16, 1, 0.3, 1] }}
-        className={`fixed top-0 left-0 right-0 z-50 transition-all duration-500 ${
-          scrolled ? "glass-nav" : "bg-transparent"
-        }`}
+        className={`fixed top-0 left-0 right-0 z-50 transition-all duration-500 ${scrolled ? "glass-nav" : ""}`}
+        style={!scrolled ? { background: "transparent" } : undefined}
       >
-        <div className="max-w-[1440px] mx-auto px-8 md:px-16 h-16 flex items-center justify-between">
+        <div className="max-w-[1360px] mx-auto px-6 md:px-14 h-16 flex items-center justify-between">
+
           {/* Logo */}
-          <button
-            onClick={() => window.scrollTo({ top: 0, behavior: "smooth" })}
-            className="flex items-center gap-4 group"
-          >
-            <div className="flex items-center gap-3">
-              {/* TEN logo */}
-              <div className="relative h-6 w-auto">
-                <Image
-                  src="/ten-logo.png"
-                  alt="TEN"
-                  width={120}
-                  height={52}
-                  priority
-                  style={{
-                    height: "22px",
-                    width: "auto",
-                    opacity: 0.9,
-                  }}
-                />
-              </div>
-              <div className="h-5 w-px bg-white/10" />
-              <span className="text-[11px] tracking-[0.2em] uppercase text-white/40 group-hover:text-white/60 transition-colors font-medium hidden sm:block">
-                Document Studio
-              </span>
+          <button onClick={() => window.scrollTo({ top: 0, behavior: "smooth" })} className="flex items-center gap-3 group">
+            <div className="relative h-6">
+              <Image
+                src="/ten-logo.png"
+                alt="TEN"
+                width={120}
+                height={52}
+                priority
+                style={{ height: "20px", width: "auto", opacity: 0.85 }}
+              />
             </div>
+            <div className="h-4 w-px" style={{ background: "var(--border-mid)" }} />
+            <span className="text-[11px] tracking-[0.2em] uppercase font-medium hidden sm:block transition-colors duration-200"
+              style={{ color: "var(--text-3)" }}>
+              Document Studio
+            </span>
           </button>
 
           {/* Desktop nav */}
-          <div className="hidden md:flex items-center gap-8">
+          <div className="hidden md:flex items-center gap-7">
             {navItems.map((item) => {
               const isActive = activeSection === item.href.replace("#", "");
               return (
                 <button
                   key={item.href}
                   onClick={() => scrollTo(item.href)}
-                  className={`relative text-[11px] tracking-[0.18em] uppercase font-medium transition-all duration-300 group ${
-                    isActive ? "text-white" : "text-white/35 hover:text-white/70"
-                  }`}
+                  className="relative text-[11px] tracking-[0.18em] uppercase font-medium transition-colors duration-200 group"
+                  style={{ color: isActive ? "var(--text-1)" : "var(--text-3)" }}
                 >
                   {item.label}
                   <span
-                    className={`absolute -bottom-1 left-0 h-px bg-accent transition-all duration-300 ${
-                      isActive ? "w-full" : "w-0 group-hover:w-full"
-                    }`}
+                    className="absolute -bottom-1 left-0 h-px transition-all duration-300"
+                    style={{
+                      background: "var(--champagne)",
+                      width: isActive ? "100%" : "0%",
+                    }}
                   />
                 </button>
               );
             })}
 
-            {/* Version tag */}
-            <div className="ml-2 tag">v0.1</div>
+            {/* Version */}
+            <span className="text-[9px] tracking-[0.18em] uppercase px-2 py-1 rounded-full border"
+              style={{ color: "var(--text-3)", borderColor: "var(--border)" }}>
+              v0.1
+            </span>
 
-            {/* User identity + sign out */}
+            {/* User */}
             {session?.user && (
-              <div className="flex items-center gap-3 ml-2 pl-4 border-l border-white/[0.08]">
-                {/* Avatar */}
-                <div className="relative w-7 h-7 flex-shrink-0">
-                  {session.user.image ? (
-                    <Image
-                      src={session.user.image}
-                      alt={displayName}
-                      width={28}
-                      height={28}
-                      className="rounded-full object-cover"
-                      style={{ opacity: 0.85 }}
-                    />
-                  ) : (
-                    <div
-                      className="w-7 h-7 flex items-center justify-center text-[10px] font-semibold tracking-wider"
-                      style={{
-                        border: "1px solid rgba(255,255,255,0.15)",
-                        background: "rgba(255,255,255,0.06)",
-                        color: "rgba(255,255,255,0.7)",
-                      }}
-                    >
-                      {getInitials()}
-                    </div>
-                  )}
-                </div>
-
-                {/* First name */}
-                <span className="text-[11px] tracking-[0.12em] text-white/40 hidden lg:block">
+              <div className="flex items-center gap-3 pl-4" style={{ borderLeft: "1px solid var(--border)" }}>
+                {session.user.image ? (
+                  <Image src={session.user.image} alt={displayName} width={26} height={26}
+                    className="rounded-full object-cover" style={{ opacity: 0.9 }} />
+                ) : (
+                  <div className="w-6 h-6 rounded-full flex items-center justify-center text-[9px] font-semibold"
+                    style={{ background: "rgba(201,169,110,0.12)", color: "var(--champagne)", border: "1px solid rgba(201,169,110,0.25)" }}>
+                    {getInitials()}
+                  </div>
+                )}
+                <span className="text-[11px] tracking-[0.1em] hidden lg:block" style={{ color: "var(--text-2)" }}>
                   {displayName}
                 </span>
-
-                {/* Sign out */}
                 <button
                   onClick={() => signOut({ callbackUrl: "/login" })}
-                  className="text-[10px] tracking-[0.16em] uppercase text-white/25 hover:text-white/55 transition-colors duration-200"
-                  title="Sign out"
+                  className="text-[10px] tracking-[0.14em] uppercase transition-colors duration-200"
+                  style={{ color: "var(--text-3)" }}
+                  onMouseEnter={e => (e.currentTarget.style.color = "var(--text-1)")}
+                  onMouseLeave={e => (e.currentTarget.style.color = "var(--text-3)")}
                 >
                   Sign out
                 </button>
@@ -168,27 +134,15 @@ export default function Navbar() {
             )}
           </div>
 
-          {/* Mobile menu button */}
-          <button
-            onClick={() => setMenuOpen(!menuOpen)}
-            className="md:hidden flex flex-col gap-1.5 p-2"
-            aria-label="Toggle menu"
-          >
-            <span
-              className={`block w-5 h-px bg-white/60 transition-all duration-300 ${
-                menuOpen ? "rotate-45 translate-y-2" : ""
-              }`}
-            />
-            <span
-              className={`block w-5 h-px bg-white/60 transition-all duration-300 ${
-                menuOpen ? "opacity-0" : ""
-              }`}
-            />
-            <span
-              className={`block w-5 h-px bg-white/60 transition-all duration-300 ${
-                menuOpen ? "-rotate-45 -translate-y-2" : ""
-              }`}
-            />
+          {/* Mobile hamburger */}
+          <button onClick={() => setMenuOpen(!menuOpen)} className="md:hidden flex flex-col gap-1.5 p-2" aria-label="Toggle menu">
+            {[0,1,2].map((i) => (
+              <span key={i} className="block w-5 h-px transition-all duration-300"
+                style={{ background: "var(--text-2)",
+                  transform: menuOpen ? (i===0 ? "rotate(45deg) translateY(8px)" : i===2 ? "rotate(-45deg) translateY(-8px)" : "none") : "none",
+                  opacity: menuOpen && i===1 ? 0 : 1,
+                }} />
+            ))}
           </button>
         </div>
       </motion.nav>
@@ -197,33 +151,26 @@ export default function Navbar() {
       <AnimatePresence>
         {menuOpen && (
           <motion.div
-            initial={{ opacity: 0, y: -10 }}
+            initial={{ opacity: 0, y: -8 }}
             animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -10 }}
-            transition={{ duration: 0.2 }}
-            className="fixed top-16 left-0 right-0 z-40 glass-nav border-t border-white/[0.05] md:hidden"
+            exit={{ opacity: 0, y: -8 }}
+            transition={{ duration: 0.18 }}
+            className="fixed top-16 left-0 right-0 z-40 glass-nav"
+            style={{ borderTop: "1px solid var(--border)" }}
           >
-            <div className="px-8 py-6 flex flex-col gap-5">
+            <div className="px-6 py-5 flex flex-col gap-4">
               {navItems.map((item) => (
-                <button
-                  key={item.href}
-                  onClick={() => scrollTo(item.href)}
-                  className="text-left text-[12px] tracking-[0.18em] uppercase text-white/50 hover:text-white transition-colors"
-                >
+                <button key={item.href} onClick={() => scrollTo(item.href)}
+                  className="text-left text-[12px] tracking-[0.18em] uppercase transition-colors"
+                  style={{ color: "var(--text-2)" }}>
                   {item.label}
                 </button>
               ))}
-
-              {/* Mobile sign out */}
               {session?.user && (
-                <div className="pt-3 mt-1 border-t border-white/[0.06] flex items-center justify-between">
-                  <span className="text-[11px] text-white/30 tracking-wider">
-                    {displayName}
-                  </span>
-                  <button
-                    onClick={() => signOut({ callbackUrl: "/login" })}
-                    className="text-[10px] tracking-[0.16em] uppercase text-white/25 hover:text-white/55 transition-colors"
-                  >
+                <div className="pt-3 mt-1 flex items-center justify-between" style={{ borderTop: "1px solid var(--border)" }}>
+                  <span className="text-[11px]" style={{ color: "var(--text-3)" }}>{displayName}</span>
+                  <button onClick={() => signOut({ callbackUrl: "/login" })}
+                    className="text-[10px] tracking-[0.14em] uppercase" style={{ color: "var(--text-3)" }}>
                     Sign out
                   </button>
                 </div>

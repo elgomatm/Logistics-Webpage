@@ -4,51 +4,50 @@ import { motion } from "framer-motion";
 
 export default function WorkspaceHeader() {
   return (
-    <section className="relative pt-32 pb-16 px-8 md:px-16 max-w-[1440px] mx-auto">
+    <section className="relative pt-28 pb-12 px-6 md:px-14 max-w-[1360px] mx-auto">
       <motion.div
         initial={{ opacity: 0, y: 16 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.7, ease: [0.16, 1, 0.3, 1], delay: 0.15 }}
-        className="flex flex-col md:flex-row md:items-end justify-between gap-8"
+        className="flex flex-col md:flex-row md:items-end justify-between gap-6"
       >
-        {/* Left — Title block */}
+        {/* Left — Title */}
         <div>
-          {/* Eyebrow */}
-          <div className="flex items-center gap-3 mb-5">
-            <div className="w-5 h-px bg-white/20" />
-            <span className="text-[10px] tracking-[0.28em] uppercase text-white/25 font-medium">
+          <div className="flex items-center gap-3 mb-4">
+            <div className="w-5 h-px" style={{ background: "var(--border-mid)" }} />
+            <span className="text-[10px] tracking-[0.28em] uppercase font-medium" style={{ color: "var(--text-3)" }}>
               The Exotics Network
             </span>
           </div>
 
           <h1
-            className="font-bebas leading-none tracking-wide text-white"
-            style={{ fontSize: "clamp(48px, 7vw, 88px)" }}
+            className="font-bebas leading-none tracking-wide"
+            style={{ fontSize: "clamp(44px, 6.5vw, 80px)", color: "var(--text-1)" }}
           >
             Document Studio
           </h1>
 
-          <p className="mt-4 text-[13px] text-white/35 tracking-wide max-w-md leading-relaxed">
+          <p className="mt-3 text-[13px] tracking-wide max-w-md leading-relaxed" style={{ color: "var(--text-2)" }}>
             Official document management for TEN. Select a module below.
           </p>
         </div>
 
-        {/* Right — Meta info */}
+        {/* Right — Meta */}
         <div className="flex items-center gap-6 shrink-0">
           <div className="text-right hidden md:block">
-            <div className="text-[9px] tracking-[0.22em] uppercase text-white/18 mb-1">
+            <div className="text-[9px] tracking-[0.22em] uppercase mb-1" style={{ color: "var(--text-3)" }}>
               Platform
             </div>
-            <div className="text-[11px] text-white/35 font-medium tracking-wide">
+            <div className="text-[11px] font-medium tracking-wide" style={{ color: "var(--text-2)" }}>
               v0.1 — Pre-release
             </div>
           </div>
-          <div className="h-8 w-px bg-white/[0.07] hidden md:block" />
+          <div className="h-8 w-px hidden md:block" style={{ background: "var(--border)" }} />
           <div className="text-right">
-            <div className="text-[9px] tracking-[0.22em] uppercase text-white/18 mb-1">
+            <div className="text-[9px] tracking-[0.22em] uppercase mb-1" style={{ color: "var(--text-3)" }}>
               Active Modules
             </div>
-            <div className="font-bebas text-2xl text-white/70 tracking-widest">
+            <div className="font-bebas text-2xl tracking-widest" style={{ color: "var(--champagne)" }}>
               1 / 3
             </div>
           </div>
@@ -60,7 +59,7 @@ export default function WorkspaceHeader() {
         initial={{ scaleX: 0, opacity: 0 }}
         animate={{ scaleX: 1, opacity: 1 }}
         transition={{ duration: 0.9, ease: [0.16, 1, 0.3, 1], delay: 0.35 }}
-        className="rule mt-10 origin-left"
+        className="rule mt-8 origin-left"
       />
     </section>
   );

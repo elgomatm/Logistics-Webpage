@@ -2,25 +2,25 @@
  * /api/reports-count
  *
  * Reads the TEN Events/2026 folder and counts .pptx/.pdf report files
- * per event by trying two strategies, in order:
+ * per event by trying three strategies, in order:
  *
- *  1. Microsoft Graph API (works on Vercel)
- *     Set these environment variables in Vercel → Settings → Environment Variables:
- *       AZURE_TENANT_ID         — from Azure AD > App Registration > Overview
- *       AZURE_CLIENT_ID         — same location
- *       AZURE_CLIENT_SECRET     — Azure AD > Certificates & Secrets
- *       ONEDRIVE_USER_EMAIL     — your Microsoft 365 email (e.g. malook@theexoticsnetwork.com)
+ *  1. Delegated Microsoft Graph API (uses the signed-in user's session token)
+ *     This is the primary strategy for Vercel deployments — no extra env vars needed
+ *     beyond the OAuth setup already required for login.
  *
- *     Required API permissions on the app registration (Application permissions, admin consent):
- *       Microsoft Graph > Files.Read.All
+ *  2. App-credential Microsoft Graph API (app-only, requires ONEDRIVE_USER_EMAIL)
+ *     Fallback if no session token is available (e.g., called from a background job).
+ *     Requires: AZURE_TENANT_ID, AZURE_CLIENT_ID, AZURE_CLIENT_SECRET, ONEDRIVE_USER_EMAIL
+ *     App Registration needs: Microsoft Graph > Files.Read.All (Application permission)
  *
- *  2. Local filesystem fallback (works when running `npm run dev` on your Mac)
+ *  3. Local filesystem fallback (works when running `npm run dev` on your Mac)
  *     No setup needed — reads directly from the synced OneDrive path.
  */
 
 import { NextResponse } from "next/server";
 import { existsSync, readdirSync, statSync } from "fs";
 import { join } from "path";
+import { auth } from "@/auth";
 
 // ── Constants ──────────────────────────────────────────────────
 const LOCAL_BASE =
@@ -35,9 +35,62 @@ function isReport(name: string) {
   return REPORT_EXTENSIONS.some((ext) => lc.endsWith(ext));
 }
 
-// ── Microsoft Graph API helpers ────────────────────────────────
+// ── Graph API helpers ──────────────────────────────────────────
 
-async function getGraphToken(): Promise<string | null> {
+async function graphGet(token: string, path: string) {
+  const res = await fetch(`https://graph.microsoft.com/v1.0${path}`, {
+    headers: { Authorization: `Bearer ${token}` },
+    cache: "no-store",
+  });
+  if (!res.ok) return null;
+  return res.json();
+}
+
+/**
+ * Strategy 1: Delegated auth — uses the signed-in user's own access token.
+ * Calls /me/drive/ so no ONEDRIVE_USER_EMAIL needed.
+ */
+async function countViaDelegatedGraph(accessToken: string) {
+  // List 2026 event folders under the user's own drive
+  const eventList = await graphGet(
+    accessToken,
+    `/me/drive/root:/${ONEDRIVE_FOLDER_PATH}:/children?$select=name,folder`
+  );
+
+  if (!eventList?.value) return null;
+
+  const eventFolders: string[] = eventList.value
+    .filter((item: { folder?: unknown }) => item.folder)
+    .map((item: { name: string }) => item.name);
+
+  const events: { name: string; count: number; files: string[] }[] = [];
+  let total = 0;
+
+  for (const eventName of eventFolders) {
+    const reportsPath = `${ONEDRIVE_FOLDER_PATH}/${eventName}/Documents/Reports`;
+    const files = await graphGet(
+      accessToken,
+      `/me/drive/root:/${reportsPath}:/children?$select=name,file`
+    );
+
+    const reportFiles: string[] = files?.value
+      ? files.value
+          .filter((f: { file?: unknown; name: string }) => f.file && isReport(f.name))
+          .map((f: { name: string }) => f.name)
+      : [];
+
+    total += reportFiles.length;
+    events.push({ name: eventName, count: reportFiles.length, files: reportFiles });
+  }
+
+  return { total, events, synced: true, source: "graph-delegated" };
+}
+
+/**
+ * Strategy 2: App credentials — client_credentials flow.
+ * Requires ONEDRIVE_USER_EMAIL env var.
+ */
+async function getAppGraphToken(): Promise<string | null> {
   const { AZURE_TENANT_ID, AZURE_CLIENT_ID, AZURE_CLIENT_SECRET } = process.env;
   if (!AZURE_TENANT_ID || !AZURE_CLIENT_ID || !AZURE_CLIENT_SECRET) return null;
 
@@ -63,23 +116,13 @@ async function getGraphToken(): Promise<string | null> {
   }
 }
 
-async function graphGet(token: string, path: string) {
-  const res = await fetch(`https://graph.microsoft.com/v1.0${path}`, {
-    headers: { Authorization: `Bearer ${token}` },
-    cache: "no-store",
-  });
-  if (!res.ok) return null;
-  return res.json();
-}
-
-async function countViaGraphAPI() {
-  const token = await getGraphToken();
+async function countViaAppGraph() {
+  const token = await getAppGraphToken();
   if (!token) return null;
 
   const userId = process.env.ONEDRIVE_USER_EMAIL;
   if (!userId) return null;
 
-  // List 2026 event folders
   const eventList = await graphGet(
     token,
     `/users/${encodeURIComponent(userId)}/drive/root:/${ONEDRIVE_FOLDER_PATH}:/children?$select=name,folder`
@@ -112,7 +155,7 @@ async function countViaGraphAPI() {
     events.push({ name: eventName, count: reportFiles.length, files: reportFiles });
   }
 
-  return { total, events, synced: true, source: "graph" };
+  return { total, events, synced: true, source: "graph-app" };
 }
 
 // ── Local filesystem fallback ──────────────────────────────────
@@ -146,15 +189,26 @@ function countViaFilesystem() {
 
 export async function GET() {
   try {
-    // Try Graph API first (Vercel deployment)
-    const graphResult = await countViaGraphAPI();
-    if (graphResult) {
-      return NextResponse.json(graphResult, {
+    // Strategy 1: Use the signed-in user's delegated token (best — no extra config)
+    const session = await auth();
+    if (session?.accessToken) {
+      const delegatedResult = await countViaDelegatedGraph(session.accessToken);
+      if (delegatedResult) {
+        return NextResponse.json(delegatedResult, {
+          headers: { "Cache-Control": "no-store" },
+        });
+      }
+    }
+
+    // Strategy 2: App credentials (Vercel, no active session, requires ONEDRIVE_USER_EMAIL)
+    const appResult = await countViaAppGraph();
+    if (appResult) {
+      return NextResponse.json(appResult, {
         headers: { "Cache-Control": "no-store" },
       });
     }
 
-    // Fall back to local filesystem (npm run dev on your Mac)
+    // Strategy 3: Local filesystem (npm run dev on Mac)
     const fsResult = countViaFilesystem();
     if (fsResult) {
       return NextResponse.json(fsResult, {
@@ -162,14 +216,14 @@ export async function GET() {
       });
     }
 
-    // Neither source available — return empty but don't crash
+    // None available — return empty but don't crash
     return NextResponse.json(
       {
         total: 0,
         events: [],
         synced: false,
         source: "none",
-        hint: "Set AZURE_TENANT_ID, AZURE_CLIENT_ID, AZURE_CLIENT_SECRET, ONEDRIVE_USER_EMAIL in Vercel env vars to enable OneDrive sync.",
+        hint: "Sign in to connect OneDrive, or set AZURE_* env vars for server-side access.",
       },
       { headers: { "Cache-Control": "no-store" } }
     );

@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import "./globals.css";
+import Providers from "@/components/Providers";
 
 export const metadata: Metadata = {
   title: "TEN Document Studio",
@@ -24,7 +25,7 @@ export default function RootLayout({
         />
       </head>
       <body className="noise-overlay">
-        {children}
+        <Providers>{children}</Providers>
       </body>
     </html>
   );

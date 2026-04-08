@@ -21,8 +21,14 @@ export default function WorkspaceHeader() {
           </div>
 
           <h1
-            className="font-bebas leading-none tracking-wide"
-            style={{ fontSize: "clamp(44px, 6.5vw, 80px)", color: "var(--text-1)" }}
+            className="leading-none"
+            style={{
+              fontSize: "clamp(44px, 6.5vw, 80px)",
+              color: "var(--text-1)",
+              fontFamily: "var(--font-inter)",
+              fontWeight: 900,
+              letterSpacing: "-0.03em",
+            }}
           >
             Document Studio
           </h1>

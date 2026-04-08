@@ -14,10 +14,11 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       issuer: `https://login.microsoftonline.com/${process.env.AZURE_TENANT_ID ?? "common"}/v2.0`,
       authorization: {
         params: {
-          // Requests an offline_access (refresh token) plus Files.Read
-          // so the app can poll OneDrive without re-prompting the user.
+          // Files.Read.All is required to see files on other users' drives via
+          // sharedWithMe (TEN lives on Adonis Ordonez's drive, not Malik's).
+          // Files.Read only covers the signed-in user's own drive.
           scope:
-            "openid profile email offline_access https://graph.microsoft.com/Files.Read",
+            "openid profile email offline_access https://graph.microsoft.com/Files.Read.All",
         },
       },
     }),

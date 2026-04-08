@@ -28,7 +28,7 @@ async function getRefreshToken(): Promise<string | null> {
         client_secret: AZURE_CLIENT_SECRET,
         grant_type: "refresh_token",
         refresh_token: rt,
-        scope: "https://graph.microsoft.com/Files.Read offline_access",
+        scope: "https://graph.microsoft.com/Files.Read.All offline_access",
       }),
       cache: "no-store",
     }

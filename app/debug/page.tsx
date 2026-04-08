@@ -136,7 +136,7 @@ export default async function DebugPage() {
       body: new URLSearchParams({
         client_id: AZURE_CLIENT_ID, client_secret: AZURE_CLIENT_SECRET,
         grant_type: "refresh_token", refresh_token: ONEDRIVE_REFRESH_TOKEN,
-        scope: "https://graph.microsoft.com/Files.Read offline_access",
+        scope: "https://graph.microsoft.com/Files.Read.All offline_access",
       }),
       cache: "no-store",
     });

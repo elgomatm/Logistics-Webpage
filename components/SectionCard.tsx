@@ -1,7 +1,7 @@
 "use client";
 
-import { useRef, useState } from "react";
-import { motion, useMotionValue, useTransform, useSpring } from "framer-motion";
+import { useRef, useState, useCallback } from "react";
+import { motion } from "framer-motion";
 import { ArrowRight, Lock } from "lucide-react";
 import Link from "next/link";
 
@@ -25,83 +25,70 @@ interface ModuleCardProps {
 }
 
 export default function SectionCard({
-  id, number, title, subtitle,
+  id, number, title, subtitle, description,
   tags, status, statusLabel,
   ctaLabel = "Open Module", href, onCta,
   index, stat, previewImages,
 }: ModuleCardProps) {
   const isActive = status === "active";
-  const cardRef = useRef<HTMLDivElement>(null);
+  const cardRef  = useRef<HTMLDivElement>(null);
+  const glowRef  = useRef<HTMLDivElement>(null);
   const [hovered, setHovered] = useState(false);
 
-  // Mouse-tracking tilt — tight spring = no lag
-  const mouseX = useMotionValue(0);
-  const mouseY = useMotionValue(0);
-  const rotateX = useSpring(useTransform(mouseY, [-0.5, 0.5], [3, -3]), { stiffness: 500, damping: 45, mass: 0.4 });
-  const rotateY = useSpring(useTransform(mouseX, [-0.5, 0.5], [-4, 4]), { stiffness: 500, damping: 45, mass: 0.4 });
-  const glowX   = useTransform(mouseX, [-0.5, 0.5], ["0%", "100%"]);
-  const glowY   = useTransform(mouseY, [-0.5, 0.5], ["0%", "100%"]);
-
-  const handleMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
-    if (!cardRef.current) return;
+  // Lightweight specular: update CSS custom properties via direct DOM — zero Framer overhead
+  const handleMouseMove = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
+    if (!cardRef.current || !glowRef.current || !isActive) return;
     const rect = cardRef.current.getBoundingClientRect();
-    mouseX.set((e.clientX - rect.left) / rect.width - 0.5);
-    mouseY.set((e.clientY - rect.top) / rect.height - 0.5);
-  };
-  const handleMouseLeave = () => {
-    mouseX.set(0);
-    mouseY.set(0);
+    const x = ((e.clientX - rect.left) / rect.width  * 100).toFixed(1) + "%";
+    const y = ((e.clientY - rect.top)  / rect.height * 100).toFixed(1) + "%";
+    glowRef.current.style.background =
+      `radial-gradient(circle at ${x} ${y}, rgba(201,169,110,0.20) 0%, rgba(201,169,110,0.05) 40%, transparent 65%)`;
+  }, [isActive]);
+
+  const handleMouseEnter = useCallback(() => setHovered(true),  []);
+  const handleMouseLeave = useCallback(() => {
     setHovered(false);
-  };
+    if (glowRef.current) glowRef.current.style.background = "transparent";
+  }, []);
 
   return (
     <motion.div
       id={id}
       ref={cardRef}
-      initial={{ opacity: 0, y: 32 }}
+      initial={{ opacity: 0, y: 28 }}
       whileInView={{ opacity: 1, y: 0 }}
       viewport={{ once: true, margin: "-40px" }}
-      transition={{ duration: 0.7, ease: [0.16, 1, 0.3, 1], delay: index * 0.1 }}
-      style={{
-        rotateX: isActive ? rotateX : 0,
-        rotateY: isActive ? rotateY : 0,
-        transformStyle: "preserve-3d",
-        perspective: 1000,
-      }}
-      whileHover={isActive ? { y: -6 } : {}}
+      transition={{ duration: 0.6, ease: [0.16, 1, 0.3, 1], delay: index * 0.08 }}
       onMouseMove={handleMouseMove}
-      onMouseEnter={() => setHovered(true)}
+      onMouseEnter={handleMouseEnter}
       onMouseLeave={handleMouseLeave}
       className={`module-card ${isActive ? "module-card-active" : ""} flex flex-col h-full relative overflow-hidden`}
     >
-      {/* Specular highlight that follows mouse */}
+      {/* Specular highlight — plain div, updated via ref, zero JS per frame */}
       {isActive && (
-        <motion.div
+        <div
+          ref={glowRef}
           className="pointer-events-none absolute inset-0 rounded-[16px] z-10"
-          style={{
-            background: useTransform(
-              [glowX, glowY],
-              ([x, y]) =>
-                `radial-gradient(circle at ${x} ${y}, rgba(201,169,110,0.22) 0%, rgba(201,169,110,0.06) 40%, transparent 65%)`
-            ),
-            opacity: hovered ? 1 : 0,
-            transition: "opacity 0.3s ease",
-          }}
+          style={{ transition: "opacity 0.25s ease", opacity: hovered ? 1 : 0 }}
         />
       )}
 
       {/* ── Header ───────────────────────────────────────────── */}
       <div className="px-6 pt-6 pb-4" style={{ borderBottom: "1px solid var(--border)" }}>
         <div className="flex items-start justify-between gap-3 mb-3">
-          {/* Number — bold champagne gold */}
-          <motion.span
-            className="font-bebas text-[52px] leading-none tracking-widest select-none"
-            style={{ color: isActive ? "var(--champagne)" : "rgba(201,169,110,0.35)" }}
-            animate={hovered && isActive ? { scale: 1.05, y: -2 } : { scale: 1, y: 0 }}
-            transition={{ type: "spring", stiffness: 400, damping: 20 }}
+          {/* Number — always champagne, just muted for planned */}
+          <span
+            className="font-bebas text-[52px] leading-none tracking-widest select-none transition-transform duration-200"
+            style={{
+              color: "var(--champagne)",
+              opacity: isActive ? 1 : 0.38,
+              transform: hovered && isActive ? "scale(1.05) translateY(-2px)" : "scale(1) translateY(0)",
+              display: "inline-block",
+              transition: "transform 0.2s ease, opacity 0.2s ease",
+            }}
           >
             {number}
-          </motion.span>
+          </span>
           {isActive
             ? <span className="badge-active mt-1 shrink-0">{statusLabel}</span>
             : <span className="badge-planned mt-1 shrink-0">{statusLabel}</span>}
@@ -125,13 +112,11 @@ export default function SectionCard({
 
         {/* Live stat */}
         {stat && isActive && (
-          <motion.div
+          <div
             className="mt-3 flex items-baseline gap-2"
-            animate={hovered ? { x: 2 } : { x: 0 }}
-            transition={{ type: "spring", stiffness: 300, damping: 20 }}
+            style={{ transform: hovered ? "translateX(2px)" : "translateX(0)", transition: "transform 0.2s ease" }}
           >
             {stat.loading ? (
-              /* Pure-CSS spinner — avoids Framer Motion freeze on first paint */
               <span
                 style={{
                   display: "inline-block",
@@ -152,11 +137,11 @@ export default function SectionCard({
             <span className="text-[9px] tracking-[0.18em] uppercase" style={{ color: "var(--text-3)" }}>
               {stat.label}
             </span>
-          </motion.div>
+          </div>
         )}
       </div>
 
-      {/* ── Stacked preview images ────────────────────────────── */}
+      {/* ── Stacked preview images — static, no hover animation ── */}
       {previewImages && previewImages.length > 0 && (
         <div
           className="relative flex items-center justify-center overflow-hidden"
@@ -168,25 +153,19 @@ export default function SectionCard({
         >
           {previewImages.map((src, i) => {
             const total = previewImages.length;
-            const mid = (total - 1) / 2;
-            const offset = (i - mid) * 76;
+            const mid   = (total - 1) / 2;
             const depth = Math.abs(i - mid);
-            const zIndex = total - depth;
-            const scale = 1 - depth * 0.04;
-            const verticalOffset = depth * 6;
+            const offsetX     = (i - mid) * 76;
+            const offsetY     = depth * 6;
+            const scale       = 1 - depth * 0.04;
 
             return (
-              <motion.div
+              <div
                 key={src}
                 className="absolute"
-                animate={
-                  hovered
-                    ? { x: offset + (i - mid) * 8, y: verticalOffset - 4, scale: scale + 0.02 }
-                    : { x: offset, y: verticalOffset, scale }
-                }
-                transition={{ type: "spring", stiffness: 260, damping: 22, delay: depth * 0.04 }}
                 style={{
-                  zIndex,
+                  transform: `translateX(${offsetX}px) translateY(${offsetY}px) scale(${scale})`,
+                  zIndex: total - depth,
                   width: "152px",
                   borderRadius: "6px",
                   overflow: "hidden",
@@ -195,8 +174,12 @@ export default function SectionCard({
                 }}
               >
                 {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src={src} alt="" style={{ width: "100%", height: "190px", objectFit: "contain", display: "block", background: "transparent" }} />
-              </motion.div>
+                <img
+                  src={src}
+                  alt=""
+                  style={{ width: "100%", height: "190px", objectFit: "contain", display: "block" }}
+                />
+              </div>
             );
           })}
         </div>

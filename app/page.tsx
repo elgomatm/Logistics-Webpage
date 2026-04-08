@@ -97,15 +97,15 @@ export default function Home() {
               subtitle="OneDrive Intelligence"
               description="A live dashboard for your connected OneDrive. Monitor total storage, track the folders consuming the most space, break down file types, and surface usage trends across the TEN document library."
               tags={["Storage Usage", "File Breakdown", "Top Folders", "Live Sync"]}
-              status="active" statusLabel="Live"
-              ctaLabel="View Analytics" href="/analytics"
+              status="planned" statusLabel="Coming Soon"
+              ctaLabel="Coming Soon"
             />
           </div>
 
           {/* Bottom meta row */}
           <div className="mt-8 flex items-center justify-between">
             <span className="text-[9px] tracking-[0.22em] uppercase" style={{ color: "var(--text-3)" }}>
-              2 active — 1 planned
+              1 active — 2 planned
             </span>
             <div className="flex items-center gap-2">
               {reportsData.synced && (

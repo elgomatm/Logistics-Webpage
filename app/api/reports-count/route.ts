@@ -1,37 +1,45 @@
 /**
  * /api/reports-count
  *
- * Scans TEN/Events/ across ALL years and ALL events, counting every
- * .pptx / .ppt / .pdf report file found anywhere inside each event folder.
+ * Counts every .pptx / .pdf report under TEN/Events/ across ALL years.
  *
- * Three strategies tried in order:
- *  1. Delegated Graph API  — uses the signed-in user's session token (/me/drive/)
- *  2. App-credential Graph — falls back if no session (requires ONEDRIVE_USER_EMAIL)
- *  3. Local filesystem     — works on your Mac with npm run dev
+ * Strategy: one Graph search call per extension → filter to TEN/Events path
+ * → group by year + event. Fast (~1-2s total regardless of folder depth).
+ *
+ * Three auth strategies in order:
+ *  1. Delegated  — signed-in user's session token (/me/drive/)
+ *  2. App-creds  — client_credentials (requires ONEDRIVE_USER_EMAIL)
+ *  3. Filesystem — local OneDrive sync path (npm run dev)
  */
 
 import { NextResponse } from "next/server";
-import { existsSync, readdirSync, statSync } from "fs";
+import { existsSync, readdirSync } from "fs";
 import { join } from "path";
 import { auth } from "@/auth";
 
-// ── Constants ────────────────────────────────────────────────────
 const LOCAL_EVENTS_ROOT =
   "/Users/malikelgomati/Library/CloudStorage/OneDrive-TheExchangeNetworkLLC/TEN/Events";
-
-const GRAPH_EVENTS_PATH = "TEN/Events";
 
 const REPORT_EXTENSIONS = [".pptx", ".ppt", ".pdf"];
 
 function isReport(name: string) {
-  const lc = name.toLowerCase();
-  return REPORT_EXTENSIONS.some((ext) => lc.endsWith(ext));
+  return REPORT_EXTENSIONS.some((ext) => name.toLowerCase().endsWith(ext));
 }
+
+// ── Types ────────────────────────────────────────────────────────
+type DriveFile = {
+  name: string;
+  parentReference?: { path?: string };
+  file?: unknown;
+  folder?: unknown;
+};
+
+type EventResult = { name: string; year: string; count: number; files: string[] };
 
 // ── Graph helpers ────────────────────────────────────────────────
 
-async function graphGet(token: string, path: string) {
-  const res = await fetch(`https://graph.microsoft.com/v1.0${path}`, {
+async function graphGet(token: string, url: string) {
+  const res = await fetch(url, {
     headers: { Authorization: `Bearer ${token}` },
     cache: "no-store",
   });
@@ -39,97 +47,88 @@ async function graphGet(token: string, path: string) {
   return res.json();
 }
 
-type DriveItem = { name: string; folder?: unknown; file?: unknown };
-type EventResult = { name: string; year: string; count: number; files: string[] };
-
 /**
- * Recursively count all report files inside an event folder via Graph API.
- * Uses search so it catches files nested in any subfolder (Reports/, Documents/, etc.)
+ * Fetch ALL pages of a Graph search/list result (handles @odata.nextLink pagination).
  */
-async function countReportsInEventGraph(
-  token: string,
-  drivePrefix: string, // e.g. "/me/drive" or "/users/{id}/drive"
-  eventPath: string    // e.g. "TEN/Events/2026/The Texas Grand Tour"
-): Promise<{ count: number; files: string[] }> {
-  // Use Graph search within the event folder for all report file types
-  const encoded = encodeURIComponent(eventPath);
-  const data = await graphGet(
-    token,
-    `${drivePrefix}/root:/${encoded}:/children?$select=name,file,folder&$top=200`
-  );
-
-  if (!data?.value) return { count: 0, files: [] };
-
-  const files: string[] = [];
-
-  const processItems = async (items: DriveItem[], currentPath: string) => {
-    for (const item of items) {
-      if (item.file && isReport(item.name)) {
-        files.push(item.name);
-      } else if (item.folder) {
-        // Recurse into subfolders
-        const subPath = `${currentPath}/${item.name}`;
-        const subData = await graphGet(
-          token,
-          `${drivePrefix}/root:/${encodeURIComponent(subPath)}:/children?$select=name,file,folder&$top=200`
-        );
-        if (subData?.value) {
-          await processItems(subData.value as DriveItem[], subPath);
-        }
-      }
-    }
-  };
-
-  await processItems(data.value as DriveItem[], eventPath);
-  return { count: files.length, files };
+async function graphGetAll(token: string, url: string): Promise<DriveFile[]> {
+  const items: DriveFile[] = [];
+  let next: string | null = url;
+  while (next) {
+    const data = await graphGet(token, next);
+    if (!data?.value) break;
+    items.push(...(data.value as DriveFile[]));
+    next = data["@odata.nextLink"] ?? null;
+  }
+  return items;
 }
 
 /**
- * Strategy 1: Delegated auth — signed-in user's token, /me/drive/
+ * Search the drive for all files matching each report extension,
+ * then filter to only those under TEN/Events/, and group by year + event.
+ *
+ * driveBase: "https://graph.microsoft.com/v1.0/me/drive"
+ *         or "https://graph.microsoft.com/v1.0/users/{id}/drive"
  */
-async function countViaDelegatedGraph(accessToken: string) {
-  const drivePrefix = "/me/drive";
-
-  // Get all year folders under TEN/Events/
-  const yearsData = await graphGet(
-    accessToken,
-    `${drivePrefix}/root:/${GRAPH_EVENTS_PATH}:/children?$select=name,folder`
+async function scanViaSearch(token: string, driveBase: string) {
+  // Run a search for each extension in parallel
+  const searches = await Promise.all(
+    REPORT_EXTENSIONS.map((ext) =>
+      graphGetAll(
+        token,
+        `${driveBase}/root/search(q='${encodeURIComponent(ext)}')?$select=name,parentReference,file&$top=200`
+      )
+    )
   );
-  if (!yearsData?.value) return null;
 
-  const yearFolders: string[] = (yearsData.value as DriveItem[])
-    .filter((i) => i.folder)
-    .map((i) => i.name)
-    .sort((a, b) => b.localeCompare(a)); // newest year first
-
-  const events: EventResult[] = [];
-  let total = 0;
-
-  for (const year of yearFolders) {
-    const eventsData = await graphGet(
-      accessToken,
-      `${drivePrefix}/root:/${GRAPH_EVENTS_PATH}/${year}:/children?$select=name,folder`
-    );
-    if (!eventsData?.value) continue;
-
-    const eventFolders: string[] = (eventsData.value as DriveItem[])
-      .filter((i) => i.folder)
-      .map((i) => i.name);
-
-    for (const eventName of eventFolders) {
-      const eventPath = `${GRAPH_EVENTS_PATH}/${year}/${eventName}`;
-      const { count, files } = await countReportsInEventGraph(accessToken, drivePrefix, eventPath);
-      total += count;
-      events.push({ name: eventName, year, count, files });
+  // Flatten and deduplicate by name+path
+  const seen = new Set<string>();
+  const allFiles: DriveFile[] = [];
+  for (const batch of searches) {
+    for (const f of batch) {
+      if (!f.file) continue; // skip folders that matched
+      const key = `${f.parentReference?.path ?? ""}/${f.name}`;
+      if (!seen.has(key)) {
+        seen.add(key);
+        allFiles.push(f);
+      }
     }
   }
 
-  return { total, events, years: yearFolders, synced: true, source: "graph-delegated" };
+  // Filter to files living under /TEN/Events/
+  const eventFiles = allFiles.filter((f) => {
+    const path = f.parentReference?.path ?? "";
+    return path.includes("/TEN/Events/") && isReport(f.name);
+  });
+
+  // Group: extract year + event from path
+  // Path looks like: /drive/root:/TEN/Events/2026/The Texas Grand Tour/Documents/Reports
+  const byEvent = new Map<string, EventResult>();
+  const yearSet = new Set<string>();
+
+  for (const f of eventFiles) {
+    const path = f.parentReference?.path ?? "";
+    const match = path.match(/\/TEN\/Events\/(\d{4})\/([^/]+)/);
+    if (!match) continue;
+    const [, year, event] = match;
+    yearSet.add(year);
+    const key = `${year}::${event}`;
+    if (!byEvent.has(key)) byEvent.set(key, { name: event, year, count: 0, files: [] });
+    const entry = byEvent.get(key)!;
+    entry.count++;
+    entry.files.push(f.name);
+  }
+
+  const events = [...byEvent.values()].sort((a, b) =>
+    b.year.localeCompare(a.year) || a.name.localeCompare(b.name)
+  );
+  const years = [...yearSet].sort((a, b) => b.localeCompare(a));
+  const total = events.reduce((s, e) => s + e.count, 0);
+
+  return { total, events, years, synced: true, source: "graph-search" };
 }
 
-/**
- * Strategy 2: App credentials — client_credentials flow
- */
+// ── App-credential token ─────────────────────────────────────────
+
 async function getAppGraphToken(): Promise<string | null> {
   const { AZURE_TENANT_ID, AZURE_CLIENT_ID, AZURE_CLIENT_SECRET } = process.env;
   if (!AZURE_TENANT_ID || !AZURE_CLIENT_ID || !AZURE_CLIENT_SECRET) return null;
@@ -153,64 +152,16 @@ async function getAppGraphToken(): Promise<string | null> {
   } catch { return null; }
 }
 
-async function countViaAppGraph() {
-  const token = await getAppGraphToken();
-  if (!token) return null;
-  const userId = process.env.ONEDRIVE_USER_EMAIL;
-  if (!userId) return null;
+// ── Local filesystem fallback ────────────────────────────────────
 
-  const drivePrefix = `/users/${encodeURIComponent(userId)}/drive`;
-
-  const yearsData = await graphGet(
-    token,
-    `${drivePrefix}/root:/${GRAPH_EVENTS_PATH}:/children?$select=name,folder`
-  );
-  if (!yearsData?.value) return null;
-
-  const yearFolders: string[] = (yearsData.value as DriveItem[])
-    .filter((i) => i.folder)
-    .map((i) => i.name)
-    .sort((a, b) => b.localeCompare(a));
-
-  const events: EventResult[] = [];
-  let total = 0;
-
-  for (const year of yearFolders) {
-    const eventsData = await graphGet(
-      token,
-      `${drivePrefix}/root:/${GRAPH_EVENTS_PATH}/${year}:/children?$select=name,folder`
-    );
-    if (!eventsData?.value) continue;
-
-    const eventFolders: string[] = (eventsData.value as DriveItem[])
-      .filter((i) => i.folder)
-      .map((i) => i.name);
-
-    for (const eventName of eventFolders) {
-      const eventPath = `${GRAPH_EVENTS_PATH}/${year}/${eventName}`;
-      const { count, files } = await countReportsInEventGraph(token, drivePrefix, eventPath);
-      total += count;
-      events.push({ name: eventName, year, count, files });
-    }
-  }
-
-  return { total, events, years: yearFolders, synced: true, source: "graph-app" };
-}
-
-/**
- * Strategy 3: Local filesystem — recursive scan of all years/events
- */
 function scanDirForReports(dir: string): string[] {
   if (!existsSync(dir)) return [];
   const results: string[] = [];
   for (const entry of readdirSync(dir, { withFileTypes: true })) {
     if (entry.name.startsWith(".")) continue;
-    const fullPath = join(dir, entry.name);
-    if (entry.isDirectory()) {
-      results.push(...scanDirForReports(fullPath));
-    } else if (isReport(entry.name)) {
-      results.push(entry.name);
-    }
+    const full = join(dir, entry.name);
+    if (entry.isDirectory()) results.push(...scanDirForReports(full));
+    else if (isReport(entry.name)) results.push(entry.name);
   }
   return results;
 }
@@ -233,8 +184,7 @@ function countViaFilesystem() {
       .map((d) => d.name);
 
     for (const eventName of eventFolders) {
-      const eventPath = join(yearPath, eventName);
-      const files = scanDirForReports(eventPath);
+      const files = scanDirForReports(join(yearPath, eventName));
       total += files.length;
       events.push({ name: eventName, year, count: files.length, files });
     }
@@ -247,15 +197,28 @@ function countViaFilesystem() {
 
 export async function GET() {
   try {
+    // Strategy 1: delegated — user's own session token
     const session = await auth();
     if (session?.accessToken) {
-      const result = await countViaDelegatedGraph(session.accessToken);
+      const result = await scanViaSearch(
+        session.accessToken,
+        "https://graph.microsoft.com/v1.0/me/drive"
+      );
       if (result) return NextResponse.json(result, { headers: { "Cache-Control": "no-store" } });
     }
 
-    const appResult = await countViaAppGraph();
-    if (appResult) return NextResponse.json(appResult, { headers: { "Cache-Control": "no-store" } });
+    // Strategy 2: app credentials
+    const appToken = await getAppGraphToken();
+    const userId = process.env.ONEDRIVE_USER_EMAIL;
+    if (appToken && userId) {
+      const result = await scanViaSearch(
+        appToken,
+        `https://graph.microsoft.com/v1.0/users/${encodeURIComponent(userId)}/drive`
+      );
+      if (result) return NextResponse.json(result, { headers: { "Cache-Control": "no-store" } });
+    }
 
+    // Strategy 3: local filesystem
     const fsResult = countViaFilesystem();
     if (fsResult) return NextResponse.json(fsResult, { headers: { "Cache-Control": "no-store" } });
 

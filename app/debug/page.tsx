@@ -124,26 +124,30 @@ export default async function DebugPage() {
   const session = await auth();
   if (!session) redirect("/login");
 
-  // Try refresh token first, fall back to session
+  // Use session token first — it reflects the scopes from the most recent sign-in.
+  // Fall back to stored refresh token only if no session token is available.
   let token: string | null = null;
   let tokenSource = "none";
 
-  const { AZURE_TENANT_ID, AZURE_CLIENT_ID, AZURE_CLIENT_SECRET, ONEDRIVE_REFRESH_TOKEN } = process.env;
-  if (ONEDRIVE_REFRESH_TOKEN && AZURE_TENANT_ID && AZURE_CLIENT_ID && AZURE_CLIENT_SECRET) {
-    const res = await fetch(`https://login.microsoftonline.com/${AZURE_TENANT_ID}/oauth2/v2.0/token`, {
-      method: "POST",
-      headers: { "Content-Type": "application/x-www-form-urlencoded" },
-      body: new URLSearchParams({
-        client_id: AZURE_CLIENT_ID, client_secret: AZURE_CLIENT_SECRET,
-        grant_type: "refresh_token", refresh_token: ONEDRIVE_REFRESH_TOKEN,
-        scope: "https://graph.microsoft.com/Files.Read.All offline_access",
-      }),
-      cache: "no-store",
-    });
-    const data = await res.json();
-    if (data.access_token) { token = data.access_token; tokenSource = "refresh_token"; }
+  if (session.accessToken) { token = session.accessToken; tokenSource = "session"; }
+
+  if (!token) {
+    const { AZURE_TENANT_ID, AZURE_CLIENT_ID, AZURE_CLIENT_SECRET, ONEDRIVE_REFRESH_TOKEN } = process.env;
+    if (ONEDRIVE_REFRESH_TOKEN && AZURE_TENANT_ID && AZURE_CLIENT_ID && AZURE_CLIENT_SECRET) {
+      const res = await fetch(`https://login.microsoftonline.com/${AZURE_TENANT_ID}/oauth2/v2.0/token`, {
+        method: "POST",
+        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        body: new URLSearchParams({
+          client_id: AZURE_CLIENT_ID, client_secret: AZURE_CLIENT_SECRET,
+          grant_type: "refresh_token", refresh_token: ONEDRIVE_REFRESH_TOKEN,
+          scope: "https://graph.microsoft.com/Files.Read.All offline_access",
+        }),
+        cache: "no-store",
+      });
+      const data = await res.json();
+      if (data.access_token) { token = data.access_token; tokenSource = "refresh_token (stored)"; }
+    }
   }
-  if (!token && session.accessToken) { token = session.accessToken; tokenSource = "session"; }
 
   const steps = token ? await runDiagnostics(token) : [];
 

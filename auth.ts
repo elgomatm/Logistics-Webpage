@@ -6,7 +6,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
     MicrosoftEntraID({
       clientId: process.env.AZURE_CLIENT_ID!,
       clientSecret: process.env.AZURE_CLIENT_SECRET!,
-      tenantId: process.env.AZURE_TENANT_ID ?? "common",
+      issuer: `https://login.microsoftonline.com/${process.env.AZURE_TENANT_ID ?? "common"}/v2.0`,
       authorization: {
         params: {
           // Requests an offline_access (refresh token) plus Files.Read

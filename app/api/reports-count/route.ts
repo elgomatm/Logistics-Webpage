@@ -84,51 +84,82 @@ async function graphChildByName(
 }
 
 /**
- * Discover the TEN folder.
- * TEN lives on Adonis Ordonez's OneDrive and is shared with the signed-in user,
- * so it does NOT appear in me/drive at all. We find it via sharedWithMe.
+ * Discover the TEN folder using the Microsoft Search API.
+ * TEN lives on Adonis Ordonez's OneDrive, shared with the signed-in user.
+ * The Graph sharedWithMe endpoint misses folders shared at the OneDrive level —
+ * the Search API searches ALL content the user can access, including those.
  */
 async function findTENFolder(
   token: string,
   userDriveBase: string
 ): Promise<{ driveBase: string; itemId: string } | null> {
-  // 1. Check sharedWithMe — TEN is shared from Adonis Ordonez's OneDrive
-  console.log("[findTEN] checking sharedWithMe...");
-  const sharedUrl = `https://graph.microsoft.com/v1.0/me/drive/sharedWithMe?$select=name,id,remoteItem&$top=200`;
-  const sharedRes = await fetch(sharedUrl, {
-    headers: { Authorization: `Bearer ${token}` },
+  // 1. Microsoft Search API — finds TEN across all accessible drives/SharePoint
+  console.log("[findTEN] searching via Microsoft Search API...");
+  const searchRes = await fetch("https://graph.microsoft.com/v1.0/search/query", {
+    method: "POST",
+    headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+    body: JSON.stringify({
+      requests: [{
+        entityTypes: ["driveItem"],
+        query: { queryString: "TEN" },
+        fields: ["name", "id", "parentReference"],
+        from: 0, size: 25,
+      }],
+    }),
     cache: "no-store",
   });
-  console.log("[findTEN] sharedWithMe status:", sharedRes.status);
+  console.log("[findTEN] search status:", searchRes.status);
+  if (searchRes.ok) {
+    const searchData = await searchRes.json();
+    const hits: Array<{ hitId: string; resource: { name: string; parentReference?: { driveId: string } } }> =
+      searchData?.value?.[0]?.hitsContainers?.[0]?.hits ?? [];
+    console.log("[findTEN] search hits:", hits.map((h) => h.resource?.name));
+    const tenHit = hits.find((h) => h.resource?.name?.toLowerCase() === "ten");
+    if (tenHit) {
+      const driveId = tenHit.resource.parentReference?.driveId;
+      const itemId = tenHit.hitId;
+      if (driveId && itemId) {
+        console.log("[findTEN] found TEN via search! driveId:", driveId);
+        return {
+          driveBase: `https://graph.microsoft.com/v1.0/drives/${driveId}`,
+          itemId,
+        };
+      }
+    }
+  }
+
+  // 2. Fall back: sharedWithMe (catches direct-share links)
+  console.log("[findTEN] search missed, trying sharedWithMe...");
+  const sharedRes = await fetch(
+    "https://graph.microsoft.com/v1.0/me/drive/sharedWithMe?$select=name,id,remoteItem&$top=200",
+    { headers: { Authorization: `Bearer ${token}` }, cache: "no-store" }
+  );
   if (sharedRes.ok) {
     const sharedData = await sharedRes.json();
     const sharedItems = (sharedData?.value ?? []) as DriveItem[];
-    console.log("[findTEN] sharedWithMe items:", sharedItems.map((i) => `${i.name}${i.remoteItem ? "(remote)" : ""}`));
     const tenShared = sharedItems.find((i) => i.name.toLowerCase() === "ten");
     if (tenShared) {
-      console.log("[findTEN] found TEN in sharedWithMe!");
+      console.log("[findTEN] found TEN in sharedWithMe");
       return resolveItem(tenShared, userDriveBase);
     }
-    console.log("[findTEN] TEN not in sharedWithMe, checking root...");
   }
 
-  // 2. Fall back to root children (in case TEN is added to personal drive later)
-  const rootUrl = `${userDriveBase}/root/children?$select=name,id,folder,remoteItem&$top=500`;
-  const rootRes = await fetch(rootUrl, {
-    headers: { Authorization: `Bearer ${token}` },
-    cache: "no-store",
-  });
+  // 3. Fall back: personal drive root
+  const rootRes = await fetch(
+    `${userDriveBase}/root/children?$select=name,id,folder,remoteItem&$top=500`,
+    { headers: { Authorization: `Bearer ${token}` }, cache: "no-store" }
+  );
   if (rootRes.ok) {
     const rootData = await rootRes.json();
     const rootItems = (rootData?.value ?? []) as DriveItem[];
     const tenItem = rootItems.find((i) => i.name.toLowerCase() === "ten");
     if (tenItem) {
-      console.log("[findTEN] found TEN in root");
+      console.log("[findTEN] found TEN in drive root");
       return resolveItem(tenItem, userDriveBase);
     }
   }
 
-  console.log("[findTEN] FAILED - TEN not found in sharedWithMe or root");
+  console.log("[findTEN] FAILED — TEN not found via search, sharedWithMe, or root");
   return null;
 }
 

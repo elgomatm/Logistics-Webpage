@@ -23,90 +23,100 @@ async function graphGet(token: string, url: string) {
   catch { return { ok: res.ok, status: res.status, data: text }; }
 }
 
+async function graphPost(token: string, url: string, body: unknown) {
+  const res = await fetch(url, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+    cache: "no-store",
+  });
+  const text = await res.text();
+  try { return { ok: res.ok, status: res.status, data: JSON.parse(text) }; }
+  catch { return { ok: res.ok, status: res.status, data: text }; }
+}
+
 async function runDiagnostics(token: string): Promise<StepResult[]> {
   const steps: StepResult[] = [];
 
-  // Step 1: sharedWithMe
-  const shared = await graphGet(token, "https://graph.microsoft.com/v1.0/me/drive/sharedWithMe?$select=name,id,remoteItem&$top=200");
-  const sharedItems: Array<{ name: string; id: string; remoteItem?: { id: string; parentReference?: { driveId?: string }; driveId?: string } }> = shared.data?.value ?? [];
+  // Step 1: Microsoft Search API — searches ALL content the user can access
+  // including shared OneDrive folders that sharedWithMe misses
+  const searchRes = await graphPost(token, "https://graph.microsoft.com/v1.0/search/query", {
+    requests: [{
+      entityTypes: ["driveItem"],
+      query: { queryString: "TEN" },
+      fields: ["name", "id", "parentReference", "webUrl"],
+      from: 0, size: 25,
+    }],
+  });
+  const hits: Array<{ hitId: string; resource: { name: string; id: string; parentReference?: { driveId: string; path: string }; webUrl?: string } }> =
+    searchRes.data?.value?.[0]?.hitsContainers?.[0]?.hits ?? [];
+  const tenHits = hits.filter((h) => h.resource?.name?.toLowerCase() === "ten");
   steps.push({
-    label: "1. sharedWithMe — all items",
-    status: sharedItems.length > 0 ? "ok" : "fail",
-    detail: sharedItems.length > 0
-      ? `ℹ️ ${sharedItems.length} item(s): ${sharedItems.map((i) => i.name).join(", ")}`
-      : `❌ No shared items returned (HTTP ${shared.status})`,
+    label: "1. Microsoft Search — find TEN folder",
+    status: tenHits.length > 0 ? "ok" : "fail",
+    detail: tenHits.length > 0
+      ? `✅ Found TEN!\n${tenHits.map((h) => `  driveId: ${h.resource.parentReference?.driveId}\n  itemId: ${h.hitId}\n  path: ${h.resource.parentReference?.path}`).join("\n")}`
+      : `❌ TEN not found via search (HTTP ${searchRes.status}). All hits: ${hits.map((h) => h.resource?.name).join(", ") || "none"}`,
   });
 
-  // Step 2: list all drives
-  const drivesRes = await graphGet(token, "https://graph.microsoft.com/v1.0/me/drives?$select=id,name,driveType,webUrl");
-  const drives: Array<{ id: string; name: string; driveType: string; webUrl?: string }> = drivesRes.data?.value ?? [];
-  steps.push({
-    label: "2. All accessible drives",
-    status: drives.length > 0 ? "ok" : "fail",
-    detail: drives.length > 0
-      ? `✅ ${drives.length} drive(s):\n${drives.map((d) => `  • ${d.name} [${d.driveType}] id:${d.id}`).join("\n")}`
-      : `❌ No drives returned (HTTP ${drivesRes.status})`,
-  });
+  // Step 2: if found, navigate TEN → Events → 2026
+  if (tenHits.length > 0) {
+    const tenHit = tenHits[0];
+    const driveId = tenHit.resource.parentReference?.driveId;
+    const itemId = tenHit.hitId;
 
-  // Step 3: check root of each drive for TEN or Events folder
-  let foundDriveId: string | null = null;
-  let foundItemId: string | null = null;
-  let foundDriveName: string | null = null;
+    if (driveId && itemId) {
+      const driveBase = `https://graph.microsoft.com/v1.0/drives/${driveId}`;
 
-  for (const drive of drives) {
-    const root = await graphGet(token, `https://graph.microsoft.com/v1.0/drives/${drive.id}/root/children?$select=name,id,folder&$top=200`);
-    const items: Array<{ name: string; id: string; folder?: unknown }> = root.data?.value ?? [];
-    const tenFolder = items.find((i) => i.name.toLowerCase() === "ten");
-    const eventsFolder = items.find((i) => i.name.toLowerCase() === "events");
-    steps.push({
-      label: `3. Root of drive: ${drive.name}`,
-      status: (tenFolder || eventsFolder) ? "ok" : "skip",
-      detail: items.length > 0
-        ? `${tenFolder ? "✅ TEN folder found!" : eventsFolder ? "✅ Events folder found!" : "ℹ️ No TEN/Events"} — folders: ${items.filter((i) => i.folder).map((i) => i.name).join(", ") || "none"}`
-        : `❌ HTTP ${root.status} — empty or error`,
-    });
-    if (tenFolder && !foundDriveId) {
-      foundDriveId = drive.id;
-      foundItemId = tenFolder.id;
-      foundDriveName = drive.name;
+      const eventsRes = await graphGet(token, `${driveBase}/items/${itemId}:/Events:/children?$select=name,id,folder&$top=100`);
+      const yearFolders: Array<{ name: string; id: string }> = (eventsRes.data?.value ?? []).filter((i: { folder?: unknown }) => i.folder);
+      steps.push({
+        label: "2. TEN/Events/ — year folders",
+        status: yearFolders.length > 0 ? "ok" : "fail",
+        detail: yearFolders.length > 0
+          ? `✅ ${yearFolders.map((y) => y.name).join(", ")}`
+          : `❌ HTTP ${eventsRes.status}: ${JSON.stringify(eventsRes.data).slice(0, 300)}`,
+      });
+
+      // Step 3: event folders for current year
+      const currentYear = new Date().getFullYear().toString();
+      const yearFolder = yearFolders.find((y) => y.name === currentYear);
+      if (yearFolder) {
+        const evts = await graphGet(token, `${driveBase}/items/${yearFolder.id}/children?$select=name,id,folder&$top=100`);
+        const eventFolders: Array<{ name: string; id: string }> = (evts.data?.value ?? []).filter((i: { folder?: unknown }) => i.folder);
+        steps.push({
+          label: `3. TEN/Events/${currentYear}/ — event folders`,
+          status: eventFolders.length > 0 ? "ok" : "fail",
+          detail: eventFolders.length > 0
+            ? `✅ ${eventFolders.length} events: ${eventFolders.map((e) => e.name).join(", ")}`
+            : `❌ No event folders (HTTP ${evts.status})`,
+        });
+
+        // Step 4: sample — reports in first event
+        if (eventFolders.length > 0) {
+          const first = eventFolders[0];
+          const rpts = await graphGet(token, `${driveBase}/items/${first.id}:/Documents/Reports:/children?$select=name,id,file&$top=25`);
+          const files: Array<{ name: string }> = (rpts.data?.value ?? []).filter((i: { file?: unknown }) => i.file);
+          steps.push({
+            label: `4. Sample reports in "${first.name}"`,
+            status: rpts.ok ? "ok" : "fail",
+            detail: rpts.ok
+              ? `✅ ${files.length} file(s): ${files.slice(0, 5).map((f) => f.name).join(", ")}${files.length > 5 ? "…" : ""}`
+              : `❌ HTTP ${rpts.status}: ${JSON.stringify(rpts.data).slice(0, 200)}`,
+          });
+        }
+      }
     }
   }
 
-  // Step 4: followed SharePoint sites
-  const sitesRes = await graphGet(token, "https://graph.microsoft.com/v1.0/me/followedSites?$select=id,name,webUrl");
-  const sites: Array<{ id: string; name: string; webUrl: string }> = sitesRes.data?.value ?? [];
+  // Always show sharedWithMe for reference
+  const shared = await graphGet(token, "https://graph.microsoft.com/v1.0/me/drive/sharedWithMe?$select=name,id&$top=50");
+  const sharedItems: Array<{ name: string }> = shared.data?.value ?? [];
   steps.push({
-    label: "4. Followed SharePoint sites",
-    status: sites.length > 0 ? "ok" : "skip",
-    detail: sites.length > 0
-      ? `✅ ${sites.length} site(s): ${sites.map((s) => s.name).join(", ")}`
-      : `ℹ️ No followed sites (HTTP ${sitesRes.status})`,
+    label: "ℹ️ sharedWithMe (for reference)",
+    status: "skip",
+    detail: `${sharedItems.length} item(s): ${sharedItems.map((i) => i.name).join(", ") || "none"}`,
   });
-
-  // Step 5: search for TEN across all drives
-  const searchRes = await graphGet(token, "https://graph.microsoft.com/v1.0/me/drive/root/search(q='TEN')?$select=name,id,folder,parentReference&$top=25");
-  const searchItems: Array<{ name: string; id: string; folder?: unknown; parentReference?: { path: string; driveId: string } }> = (searchRes.data?.value ?? []).filter((i: { folder?: unknown }) => i.folder);
-  steps.push({
-    label: "5. Search for 'TEN' folder across drives",
-    status: searchItems.length > 0 ? "ok" : "fail",
-    detail: searchItems.length > 0
-      ? `✅ Found: ${searchItems.map((i) => `${i.name} (driveId:${i.parentReference?.driveId}, path:${i.parentReference?.path})`).join("\n")}`
-      : `❌ No TEN folder found via search (HTTP ${searchRes.status})`,
-  });
-
-  // Step 6: if we found TEN on a drive, navigate into it
-  if (foundDriveId && foundItemId) {
-    const driveBase = `https://graph.microsoft.com/v1.0/drives/${foundDriveId}`;
-    const eventsRes = await graphGet(token, `${driveBase}/items/${foundItemId}:/Events:/children?$select=name,id,folder&$top=100`);
-    const yearFolders: Array<{ name: string; id: string }> = (eventsRes.data?.value ?? []).filter((i: { folder?: unknown }) => i.folder);
-    steps.push({
-      label: `6. TEN/Events/ on drive "${foundDriveName}"`,
-      status: yearFolders.length > 0 ? "ok" : "fail",
-      detail: yearFolders.length > 0
-        ? `✅ Year folders: ${yearFolders.map((y) => y.name).join(", ")}`
-        : `❌ HTTP ${eventsRes.status}: ${JSON.stringify(eventsRes.data).slice(0, 200)}`,
-    });
-  }
 
   return steps;
 }

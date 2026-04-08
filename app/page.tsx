@@ -7,7 +7,7 @@ import SectionCard from "@/components/SectionCard";
 import Footer from "@/components/Footer";
 import LoginSuccessAnimation from "@/components/LoginSuccessAnimation";
 
-interface ReportEvent { name: string; count: number; }
+interface ReportEvent { name: string; year: string; count: number; files?: string[] }
 interface ReportsData { total: number; events: ReportEvent[]; synced: boolean; source?: string; }
 
 const POLL_INTERVAL = 45_000;
@@ -59,11 +59,15 @@ export default function Home() {
               tags={["Event Reports", "Metrics", "Auto-Populate", "PDF Export"]}
               status="active" statusLabel="In Development"
               ctaLabel="Open Reports" href="/reports"
-              stat={
-                reportsData.synced
-                  ? { value: reportsData.total, label: `reports — ${new Date().getFullYear()}` }
-                  : { value: "—", label: "reports this year" }
-              }
+              stat={(() => {
+                if (!reportsData.synced) return { value: "—", label: "reports this year" };
+                const yr = String(new Date().getFullYear());
+                const yearCount = reportsData.events
+                  .filter((e) => e.year === yr)
+                  .reduce((s, e) => s + e.count, 0);
+                const displayCount = yearCount > 0 ? yearCount : reportsData.total;
+                return { value: displayCount, label: `reports — ${yr}` };
+              })()}
               previewImages={[
                 "/report-covers/cover-1.jpg",
                 "/report-covers/cover-2.jpg",

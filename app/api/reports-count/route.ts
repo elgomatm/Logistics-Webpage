@@ -610,7 +610,9 @@ const fetchReportsCount = unstable_cache(
       return null;
     }
 
-    // Auth strategy 1: stored refresh token (works 24/7)
+    // NOTE: auth() cannot be called inside unstable_cache — it uses headers() internally
+    // which is a dynamic data source. Session-token fallback lives in the GET handler below.
+    // Only the stored refresh token (env var, no headers needed) is used here.
     const hasRefreshToken = !!process.env.ONEDRIVE_REFRESH_TOKEN;
     console.log("[reports-count] ONEDRIVE_REFRESH_TOKEN present:", hasRefreshToken);
     const rtResult = await getAccessTokenFromRefreshToken();
@@ -620,35 +622,22 @@ const fetchReportsCount = unstable_cache(
       if (result) return result;
     }
 
-    // Auth strategy 2: active session
-    const session = await auth();
-    console.log("[reports-count] session accessToken present:", !!session?.accessToken);
-    if (session?.accessToken) {
-      const result = await tryWithToken(session.accessToken, "session");
-      if (result) return result;
-    }
-
-    // Auth strategy 3: filesystem (dev only)
-    const fsResult = countViaFilesystem();
-    if (fsResult) {
-      console.log("[reports-count] filesystem fallback:", fsResult.total, "files");
-      return fsResult;
-    }
-
     const rtError = rtResult?.error;
-    console.log("[reports-count] ===== ALL STRATEGIES FAILED =====");
+    console.log("[reports-count] refresh token strategy failed — session fallback handled in GET handler");
     return {
       total: 0, events: [], years: [], synced: false, source: "none",
       ...(rtError && { refreshTokenError: rtError }),
     };
   },
-  ["reports-count-v1"],          // cache key
+  ["reports-count-v2"],          // bumped from v1 — logic changed
   { revalidate: 3600 }           // refresh every hour
 );
 
 // ── Route handler ────────────────────────────────────────────────────────────
 
 export async function GET() {
+  const DRIVE_BASE = "https://graph.microsoft.com/v1.0/me/drive";
+
   try {
     // Dev: always use filesystem so local changes are reflected immediately
     if (process.env.NODE_ENV !== "production") {
@@ -656,13 +645,63 @@ export async function GET() {
       if (fsResult) return NextResponse.json(fsResult);
     }
 
-    const data = await fetchReportsCount();
-    return NextResponse.json(data, {
-      headers: {
-        // Tell the browser not to cache — freshness is handled server-side
-        "Cache-Control": "no-store",
-      },
-    });
+    // Strategy 1: cached refresh-token path (works 24/7, no session needed)
+    const cached = await fetchReportsCount();
+    if (cached.total > 0) {
+      return NextResponse.json(cached, { headers: { "Cache-Control": "no-store" } });
+    }
+
+    // Strategy 2: active session token — auth() uses headers() so it MUST live outside
+    // unstable_cache. Runs uncached on every request when the refresh-token path fails
+    // (e.g. ONEDRIVE_REFRESH_TOKEN not yet set in Vercel, or token expired).
+    const session = await auth();
+    console.log("[reports-count] session accessToken present:", !!session?.accessToken);
+    if (session?.accessToken) {
+      const currentYear = new Date().getFullYear().toString();
+
+      // Primary: sharedWithMe → TEN → Events (TEN is on Adonis Ordonez's drive, shared with Malik)
+      const directResult = await countViaDirectPath(session.accessToken, currentYear);
+      if (directResult && directResult.total > 0) {
+        console.log("[reports-count] session_direct SUCCESS:", directResult.total);
+        return NextResponse.json(
+          { ...directResult, source: "session_direct" },
+          { headers: { "Cache-Control": "no-store" } }
+        );
+      }
+
+      // Fallback: search across all accessible drives
+      const drivesRes = await fetch("https://graph.microsoft.com/v1.0/me/drives", {
+        headers: { Authorization: `Bearer ${session.accessToken}` },
+        cache: "no-store",
+      });
+      if (drivesRes.ok) {
+        const drivesData = (await drivesRes.json()) as { value?: Array<{ id: string; name: string; driveType: string }> };
+        for (const drive of drivesData?.value ?? []) {
+          const driveBase = `https://graph.microsoft.com/v1.0/drives/${drive.id}`;
+          const result = await countViaSearch(session.accessToken, driveBase);
+          if (result && result.total > 0) {
+            console.log("[reports-count] session_drive_search SUCCESS on:", drive.name, result.total);
+            return NextResponse.json(
+              { ...result, source: "session_drive_search" },
+              { headers: { "Cache-Control": "no-store" } }
+            );
+          }
+        }
+      }
+
+      // Last resort: personal drive search
+      const searchResult = await countViaSearch(session.accessToken, DRIVE_BASE);
+      if (searchResult && searchResult.total > 0) {
+        console.log("[reports-count] session_search SUCCESS:", searchResult.total);
+        return NextResponse.json(
+          { ...searchResult, source: "session_search" },
+          { headers: { "Cache-Control": "no-store" } }
+        );
+      }
+    }
+
+    // All strategies failed — return cached result (includes any error info)
+    return NextResponse.json(cached, { headers: { "Cache-Control": "no-store" } });
   } catch (err) {
     console.log("[reports-count] UNCAUGHT ERROR:", err);
     return NextResponse.json(

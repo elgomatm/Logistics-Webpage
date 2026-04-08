@@ -24,7 +24,7 @@ import { auth } from "@/auth";
 const LOCAL_EVENTS_ROOT =
   "/Users/malikelgomati/Library/CloudStorage/OneDrive-TheExchangeNetworkLLC/TEN/Events";
 
-const REPORT_EXTENSIONS = [".pptx", ".ppt", ".pdf"];
+const REPORT_EXTENSIONS = [".pptx", ".ppt"];
 
 function isReport(name: string) {
   return REPORT_EXTENSIONS.some((ext) => name.toLowerCase().endsWith(ext));
@@ -245,29 +245,34 @@ async function countViaDirectPath(
         const data = (await res.json()) as { value?: DriveItem[] };
         const items = data?.value ?? [];
 
+        // Collect .pptx/.ppt files directly in Reports/
         const directFiles = items.filter((f) => f.file && isReport(f.name)).map((f) => f.name);
 
-        // If Reports folder contains subfolders instead of files, scan one level deeper
+        // ALWAYS scan one level deeper into any subfolders (e.g. Reports/pptm/, Reports/PPTs/)
+        // Some events store all files in a subfolder, others mix direct + subfolder
         const subFolders = items.filter((f) => f.folder);
-        if (directFiles.length === 0 && subFolders.length > 0) {
-          const nested = await Promise.all(
-            subFolders.map(async (sub) => {
-              const { driveBase: sdb, itemId: sid } = resolveItem(sub, edb);
-              const subRes: Response = await fetch(
-                `${sdb}/items/${sid}/children?$select=name,id,file&$top=500`,
-                { headers: { Authorization: `Bearer ${token}` }, cache: "no-store" }
-              );
-              if (!subRes.ok) return [];
-              const subData = (await subRes.json()) as { value?: DriveItem[] };
-              return (subData?.value ?? []).filter((f) => f.file && isReport(f.name)).map((f) => f.name);
-            })
-          );
-          return nested.flat();
-        }
-        return directFiles;
+        const nestedFiles = subFolders.length > 0
+          ? (await Promise.all(
+              subFolders.map(async (sub) => {
+                const { driveBase: sdb, itemId: sid } = resolveItem(sub, edb);
+                const subRes: Response = await fetch(
+                  `${sdb}/items/${sid}/children?$select=name,id,file&$top=500`,
+                  { headers: { Authorization: `Bearer ${token}` }, cache: "no-store" }
+                );
+                if (!subRes.ok) return [];
+                const subData = (await subRes.json()) as { value?: DriveItem[] };
+                return (subData?.value ?? []).filter((f) => f.file && isReport(f.name)).map((f) => f.name);
+              })
+            )).flat()
+          : [];
+
+        // Combine and deduplicate
+        return Array.from(new Set([...directFiles, ...nestedFiles]));
       }
 
-      // Try Documents/Reports first, then Documents root, then event root
+      // Only count files in Documents/Reports (or one level deeper for subfolders like pptm/).
+      // Do NOT fall back to Documents root — that folder contains MEPs, SOPs, and other
+      // non-report files that should not be counted.
       const reportsUrl = `${edb}/items/${eid}:/Documents/Reports:/children?$select=name,id,file,folder,remoteItem&$top=500`;
       const fromReports = await fetchReportFiles(reportsUrl);
       console.log(`[direct_path] ${event.name} -> Documents/Reports: ${fromReports.length} files`, fromReports);
@@ -275,14 +280,7 @@ async function countViaDirectPath(
         return { name: event.name, year, count: fromReports.length, files: fromReports };
       }
 
-      const docsUrl = `${edb}/items/${eid}:/Documents:/children?$select=name,id,file&$top=500`;
-      const fromDocs = await fetchReportFiles(docsUrl);
-      console.log(`[direct_path] ${event.name} -> Documents: ${fromDocs.length} files`, fromDocs);
-      if (fromDocs.length > 0) {
-        return { name: event.name, year, count: fromDocs.length, files: fromDocs };
-      }
-
-      console.log(`[direct_path] ${event.name} -> 0 reports found anywhere`);
+      console.log(`[direct_path] ${event.name} -> no Reports folder or empty, skipping`);
       return { name: event.name, year, count: 0, files: [] };
     })
   );

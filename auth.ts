@@ -19,6 +19,10 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
   ],
 
   callbacks: {
+    // Block unauthenticated users — middleware uses this to decide whether to redirect
+    authorized({ auth }) {
+      return !!auth?.user;
+    },
     // Persist the Microsoft access token inside the JWT so API routes can use it
     async jwt({ token, account }) {
       if (account?.access_token) {

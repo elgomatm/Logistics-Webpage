@@ -85,21 +85,27 @@ export default function Home() {
               description="Build comprehensive partner guides and venue handbooks with ease. Standardize layouts, auto-fill venue details, and produce print-ready documents that represent TEN at the highest level."
               tags={["Venue Guides", "Partner Handbooks", "Templates", "Brand-Consistent"]}
               status="planned" statusLabel="Planned" ctaLabel="Coming Soon"
+              previewImages={[
+                "/guide-covers/cover-1.jpg",
+                "/guide-covers/cover-2.png",
+                "/guide-covers/cover-3.png",
+              ]}
             />
 
             <SectionCard
-              index={2} id="emails" number="03" title="EMAILS"
-              subtitle="Partner Communications"
-              description="Automate post-event partner communications. Draft, personalize, and send official TEN emails — with attached reports, curated stats, and branded messaging — from a single interface."
-              tags={["Automated Emails", "Partner Outreach", "Report Delivery", "Personalized"]}
-              status="planned" statusLabel="Planned" ctaLabel="Coming Soon"
+              index={2} id="analytics" number="03" title="ANALYTICS"
+              subtitle="OneDrive Intelligence"
+              description="A live dashboard for your connected OneDrive. Monitor total storage, track the folders consuming the most space, break down file types, and surface usage trends across the TEN document library."
+              tags={["Storage Usage", "File Breakdown", "Top Folders", "Live Sync"]}
+              status="active" statusLabel="Live"
+              ctaLabel="View Analytics" href="/analytics"
             />
           </div>
 
           {/* Bottom meta row */}
           <div className="mt-8 flex items-center justify-between">
             <span className="text-[9px] tracking-[0.22em] uppercase" style={{ color: "var(--text-3)" }}>
-              1 active — 2 planned
+              2 active — 1 planned
             </span>
             <div className="flex items-center gap-2">
               {reportsData.synced && (

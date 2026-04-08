@@ -95,12 +95,13 @@ const MOCK_PARTNERS = [
 
 // ─── Slide transition variants ────────────────────────────────
 const slideVariants = {
-  enter: (dir: number) => ({ x: dir > 0 ? 80 : -80, opacity: 0 }),
-  center: { x: 0, opacity: 1, transition: { duration: 0.45, ease: [0.16, 1, 0.3, 1] } },
+  enter: (dir: number) => ({ x: dir > 0 ? 60 : -60, opacity: 0, scale: 0.98 }),
+  center: { x: 0, opacity: 1, scale: 1, transition: { duration: 0.42, ease: [0.16, 1, 0.3, 1] } },
   exit: (dir: number) => ({
-    x: dir > 0 ? -80 : 80,
+    x: dir > 0 ? -60 : 60,
     opacity: 0,
-    transition: { duration: 0.3, ease: [0.4, 0, 1, 1] },
+    scale: 0.98,
+    transition: { duration: 0.28, ease: [0.4, 0, 1, 1] },
   }),
 };
 
@@ -159,7 +160,7 @@ function StepContent({ stepIndex }: { stepIndex: number }) {
   if (stepIndex === 0) {
     const hasGroups = eventGroups.some((g) => g.files.length > 0);
     return (
-      <div className="space-y-5">
+      <div className="space-y-6">
         <div className="step-row">
           <label className="field-label">Template Report</label>
           <div className="relative">
@@ -187,7 +188,7 @@ function StepContent({ stepIndex }: { stepIndex: number }) {
               )}
             </select>
           </div>
-          <p className="text-[10px] mt-1" style={{ color: "var(--text-3)" }}>
+          <p className="text-[10px] mt-2 leading-relaxed" style={{ color: "var(--text-3)" }}>
             Reports are grouped by event. The selected file will be duplicated — your original is never modified.
           </p>
         </div>
@@ -206,7 +207,7 @@ function StepContent({ stepIndex }: { stepIndex: number }) {
               Browse
             </button>
           </div>
-          <p className="text-[10px] mt-1" style={{ color: "var(--text-3)" }}>
+          <p className="text-[10px] mt-2 leading-relaxed" style={{ color: "var(--text-3)" }}>
             The generated PPTX will be saved directly into this folder.
           </p>
         </div>
@@ -222,16 +223,15 @@ function StepContent({ stepIndex }: { stepIndex: number }) {
           <label className="field-label">Cover Background Image</label>
           <input ref={coverInputRef} type="file" accept="image/*" className="hidden" onChange={handleCoverImage} />
           {coverPreview ? (
-            <div className="relative w-full aspect-[3/2] overflow-hidden border border-black/[0.1]">
+            <div className="relative w-full aspect-[3/2] overflow-hidden rounded-lg border border-black/[0.1]">
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img src={coverPreview} alt="Cover preview" className="w-full h-full object-cover" />
               <button
                 onClick={() => setCoverPreview(null)}
-                className="absolute top-2 right-2 w-6 h-6 bg-black/40 flex items-center justify-center hover:bg-black/60 transition-colors"
+                className="absolute top-2 right-2 w-6 h-6 rounded-full bg-black/40 flex items-center justify-center hover:bg-black/60 transition-colors"
               >
                 <X size={12} className="text-white" />
               </button>
-              <div className="absolute bottom-0 inset-x-0 h-px bg-black/10" />
             </div>
           ) : (
             <div className="upload-zone" onClick={() => coverInputRef.current?.click()}>
@@ -241,13 +241,15 @@ function StepContent({ stepIndex }: { stepIndex: number }) {
             </div>
           )}
         </div>
-        <div className="step-row">
-          <label className="field-label">Cover Title</label>
-          <input type="text" className="input-field" placeholder="e.g. LONE STAR SUPERCARS" />
-        </div>
-        <div className="step-row">
-          <label className="field-label">Cover Subtitle / Date Line</label>
-          <input type="text" className="input-field" placeholder="e.g. Circuit of The Americas — April 2026" />
+        <div className="grid grid-cols-2 gap-5">
+          <div className="step-row">
+            <label className="field-label">Cover Title</label>
+            <input type="text" className="input-field" placeholder="e.g. LONE STAR SUPERCARS" />
+          </div>
+          <div className="step-row">
+            <label className="field-label">Cover Subtitle / Date Line</label>
+            <input type="text" className="input-field" placeholder="e.g. Circuit of The Americas — April 2026" />
+          </div>
         </div>
       </div>
     );
@@ -259,19 +261,19 @@ function StepContent({ stepIndex }: { stepIndex: number }) {
       <div className="space-y-5">
         <div className="step-row">
           <label className="field-label">Select Partners — {partners.filter((p) => p.selected).length} selected</label>
-          <div className="overflow-y-auto border border-black/[0.08] rounded-lg" style={{ maxHeight: "260px" }}>
+          <div className="overflow-y-auto border border-black/[0.08] rounded-xl" style={{ maxHeight: "280px" }}>
             {partners.map((partner) => (
               <div
                 key={partner.id}
                 onClick={() => togglePartner(partner.id)}
-                className="flex items-center gap-4 px-4 py-3.5 cursor-pointer transition-colors"
+                className="flex items-center gap-4 px-5 py-4 cursor-pointer transition-colors"
                 style={{
                   background: partner.selected ? "rgba(122,80,16,0.05)" : "transparent",
                   borderBottom: "1px solid rgba(0,0,0,0.05)",
                 }}
               >
                 <div
-                  className="w-8 h-8 flex items-center justify-center shrink-0 border"
+                  className="w-9 h-9 flex items-center justify-center shrink-0 rounded-lg border"
                   style={{ borderColor: partner.selected ? "var(--champagne)" : "rgba(0,0,0,0.12)" }}
                 >
                   <span
@@ -281,28 +283,28 @@ function StepContent({ stepIndex }: { stepIndex: number }) {
                     {partner.initials}
                   </span>
                 </div>
-                <span className="text-[13px] flex-1" style={{ color: partner.selected ? "var(--text-1)" : "var(--text-3)" }}>
+                <span className="text-[13px] flex-1 font-medium" style={{ color: partner.selected ? "var(--text-1)" : "var(--text-3)" }}>
                   {partner.name}
                 </span>
                 <div
-                  className="w-4 h-4 border flex items-center justify-center shrink-0"
+                  className="w-5 h-5 rounded border flex items-center justify-center shrink-0 transition-all"
                   style={{
                     borderColor: partner.selected ? "var(--champagne)" : "rgba(0,0,0,0.2)",
-                    background: partner.selected ? "rgba(122,80,16,0.08)" : "transparent",
+                    background: partner.selected ? "rgba(122,80,16,0.1)" : "transparent",
                   }}
                 >
-                  {partner.selected && <Check size={10} strokeWidth={2.5} style={{ color: "var(--champagne)" }} />}
+                  {partner.selected && <Check size={11} strokeWidth={2.5} style={{ color: "var(--champagne)" }} />}
                 </div>
               </div>
             ))}
           </div>
         </div>
 
-        <div className="border border-black/[0.08] rounded-lg overflow-hidden">
+        <div className="border border-black/[0.08] rounded-xl overflow-hidden">
           {!addingPartner ? (
             <button
               onClick={() => setAddingPartner(true)}
-              className="w-full flex items-center gap-3 px-4 py-3.5 text-[11px] tracking-[0.14em] uppercase transition-all"
+              className="w-full flex items-center gap-3 px-5 py-4 text-[11px] tracking-[0.14em] uppercase transition-all"
               style={{ color: "var(--text-3)" }}
               onMouseEnter={e => (e.currentTarget.style.background = "rgba(0,0,0,0.02)")}
               onMouseLeave={e => (e.currentTarget.style.background = "transparent")}
@@ -311,7 +313,7 @@ function StepContent({ stepIndex }: { stepIndex: number }) {
               Add New Partner
             </button>
           ) : (
-            <div className="p-4 space-y-3">
+            <div className="p-5 space-y-4">
               <label className="field-label">New Partner Name</label>
               <input
                 type="text"
@@ -347,17 +349,17 @@ function StepContent({ stepIndex }: { stepIndex: number }) {
       <div className="space-y-6">
         <div className="step-row">
           <label className="field-label">Hero Banner Image</label>
-          <p className="text-[11px] mb-3 leading-relaxed" style={{ color: "var(--text-3)" }}>
+          <p className="text-[11px] mb-4 leading-relaxed" style={{ color: "var(--text-3)" }}>
             This image spans the full header of every slide in the report. Upload a landscape photo, then drag to reposition within the crop frame.
           </p>
           <input ref={headerInputRef} type="file" accept="image/*" className="hidden" onChange={handleHeaderImage} />
           {headerPreview ? (
             <div className="space-y-3">
-              <div className="relative w-full overflow-hidden border border-black/[0.1]" style={{ aspectRatio: "16 / 4" }}>
+              <div className="relative w-full overflow-hidden rounded-lg border border-black/[0.1]" style={{ aspectRatio: "16 / 4" }}>
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img src={headerPreview} alt="Header preview" className="absolute inset-0 w-full h-full object-cover" />
                 <div className="absolute inset-0 flex items-center justify-center">
-                  <div className="flex items-center gap-2 bg-black/50 px-3 py-1.5">
+                  <div className="flex items-center gap-2 bg-black/50 rounded-full px-3 py-1.5">
                     <Move size={11} strokeWidth={1.5} className="text-white/60" />
                     <span className="text-[9px] tracking-widest uppercase text-white/60">Drag to reposition</span>
                   </div>
@@ -394,9 +396,9 @@ function StepContent({ stepIndex }: { stepIndex: number }) {
           )}
         </div>
 
-        <div className="border border-black/[0.07] rounded-lg p-4 space-y-2">
+        <div className="border border-black/[0.07] rounded-xl p-5 space-y-3">
           <p className="field-label">Slide Preview</p>
-          <div className="w-full border border-black/[0.07] rounded" style={{ aspectRatio: "210 / 297", maxHeight: "200px", position: "relative", overflow: "hidden" }}>
+          <div className="w-full border border-black/[0.07] rounded-lg" style={{ aspectRatio: "210 / 297", maxHeight: "200px", position: "relative", overflow: "hidden" }}>
             <div
               className="absolute inset-x-0 top-0"
               style={{
@@ -408,7 +410,7 @@ function StepContent({ stepIndex }: { stepIndex: number }) {
             <div className="absolute inset-x-4" style={{ top: "28%", height: "4px", background: "rgba(0,0,0,0.06)" }} />
             <div className="absolute inset-x-4 space-y-1.5" style={{ top: "38%" }}>
               {[80, 60, 40, 40].map((w, i) => (
-                <div key={i} className="h-1.5" style={{ width: `${w}%`, background: "rgba(0,0,0,0.05)" }} />
+                <div key={i} className="h-1.5 rounded-full" style={{ width: `${w}%`, background: "rgba(0,0,0,0.05)" }} />
               ))}
             </div>
             <p className="absolute bottom-2 left-0 right-0 text-center text-[7px] tracking-widest uppercase" style={{ color: "var(--text-3)" }}>
@@ -424,7 +426,7 @@ function StepContent({ stepIndex }: { stepIndex: number }) {
   if (stepIndex === 4) {
     return (
       <div className="space-y-5">
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid grid-cols-2 gap-5">
           <div className="step-row col-span-2">
             <label className="field-label">Event Name</label>
             <input type="text" className="input-field" placeholder="e.g. Lone Star Supercars — COTA" />
@@ -465,16 +467,16 @@ function StepContent({ stepIndex }: { stepIndex: number }) {
       { label: "Website Clicks",    placeholder: "e.g. 320",     hint: "Link clicks to website or bio" },
     ];
     return (
-      <div className="space-y-4">
+      <div className="space-y-5">
         <p className="text-[11px] leading-relaxed" style={{ color: "var(--text-3)" }}>
           Pull these figures from <span style={{ color: "var(--text-2)" }}>Meta Business Suite → Insights</span> for the event window.
         </p>
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid grid-cols-2 gap-5">
           {metricFields.map((field) => (
             <div key={field.label} className="step-row">
               <label className="field-label">{field.label}</label>
               <input type="text" className="input-field" placeholder={field.placeholder} />
-              <p className="text-[9px] mt-1" style={{ color: "var(--text-3)" }}>{field.hint}</p>
+              <p className="text-[9px] mt-1.5" style={{ color: "var(--text-3)" }}>{field.hint}</p>
             </div>
           ))}
         </div>
@@ -499,24 +501,24 @@ function StepContent({ stepIndex }: { stepIndex: number }) {
         </div>
 
         {photoCount > 0 ? (
-          <div className="grid grid-cols-4 gap-2">
+          <div className="grid grid-cols-4 gap-2.5">
             {Array.from({ length: Math.min(photoCount, 8) }).map((_, i) => (
               <div
                 key={i}
-                className="relative border border-black/[0.08] rounded flex items-center justify-center"
+                className="relative border border-black/[0.08] rounded-lg flex items-center justify-center"
                 style={{ aspectRatio: "1", background: "rgba(0,0,0,0.03)" }}
               >
                 <span className="text-[9px] tracking-widest uppercase" style={{ color: "var(--text-3)" }}>
                   Photo {i + 1}
                 </span>
-                <div className="absolute top-1 right-1">
+                <div className="absolute top-1.5 right-1.5">
                   <ScanLine size={9} strokeWidth={1.5} style={{ color: "var(--text-3)" }} />
                 </div>
               </div>
             ))}
             {photoCount > 8 && (
               <div
-                className="flex items-center justify-center border border-black/[0.06] rounded"
+                className="flex items-center justify-center border border-black/[0.06] rounded-lg"
                 style={{ aspectRatio: "1", background: "rgba(0,0,0,0.02)" }}
               >
                 <span className="text-[10px]" style={{ color: "var(--text-3)" }}>+{photoCount - 8} more</span>
@@ -524,9 +526,9 @@ function StepContent({ stepIndex }: { stepIndex: number }) {
             )}
           </div>
         ) : (
-          <div className="grid grid-cols-4 gap-2 opacity-30 pointer-events-none select-none">
+          <div className="grid grid-cols-4 gap-2.5 opacity-30 pointer-events-none select-none">
             {Array.from({ length: 8 }).map((_, i) => (
-              <div key={i} className="border border-black/[0.06] rounded" style={{ aspectRatio: "1", background: "rgba(0,0,0,0.02)" }} />
+              <div key={i} className="border border-black/[0.06] rounded-lg" style={{ aspectRatio: "1", background: "rgba(0,0,0,0.02)" }} />
             ))}
           </div>
         )}
@@ -553,17 +555,17 @@ function StepContent({ stepIndex }: { stepIndex: number }) {
     ];
     return (
       <div className="space-y-6">
-        <div className="border border-black/[0.08] rounded-lg overflow-hidden">
+        <div className="border border-black/[0.08] rounded-xl overflow-hidden">
           {summaryItems.map((item, i) => (
             <div
               key={item.label}
-              className="flex items-center justify-between px-4 py-3"
+              className="flex items-center justify-between px-5 py-3.5"
               style={{ borderBottom: i < summaryItems.length - 1 ? "1px solid rgba(0,0,0,0.05)" : "none" }}
             >
               <span className="text-[10px] tracking-[0.14em] uppercase" style={{ color: "var(--text-3)" }}>
                 {item.label}
               </span>
-              <span className="text-[12px]" style={{ color: "var(--text-2)" }}>
+              <span className="text-[12px] font-medium" style={{ color: "var(--text-2)" }}>
                 {item.value}
               </span>
             </div>
@@ -602,30 +604,40 @@ export default function ReportsPage() {
 
   const currentStep = STEPS[step];
   const StepIcon    = currentStep.icon;
+  const progress    = ((step + 1) / STEPS.length) * 100;
 
   return (
-    <div className="min-h-screen flex flex-col" style={{ background: "var(--bg)" }}>
+    <div
+      className="min-h-screen flex flex-col"
+      style={{ background: "var(--bg)" }}
+    >
+      {/* ── Ambient glow ─────────────────────────────────────── */}
+      <div
+        aria-hidden
+        className="pointer-events-none fixed inset-0 z-0"
+        style={{
+          background: [
+            "radial-gradient(ellipse 80% 45% at 50% -5%, rgba(201,169,110,0.11) 0%, transparent 65%)",
+            "radial-gradient(ellipse 50% 30% at 50% 0%, rgba(201,169,110,0.06) 0%, transparent 55%)",
+          ].join(", "),
+        }}
+      />
 
       {/* ── Top nav bar ───────────────────────────────────────── */}
       <header className="fixed top-0 left-0 right-0 z-50 glass-nav">
         <div className="max-w-[1440px] mx-auto px-8 md:px-16 h-14 flex items-center gap-4">
 
-          {/* TEN Logo */}
-          <Link href="/" className="flex items-center gap-3 shrink-0 group">
-            <Image
-              src="/ten-logo.png"
-              alt="TEN"
-              width={28}
-              height={28}
-              className="object-contain"
-              style={{ filter: "brightness(0)" }}
-            />
+          {/* TEN wordmark */}
+          <Link href="/" className="flex items-center gap-3 shrink-0">
+            <span className="font-bebas text-[20px] tracking-[0.18em] leading-none" style={{ color: "var(--text-1)" }}>
+              TEN
+            </span>
             <div className="h-4 w-px" style={{ background: "var(--border-mid)" }} />
           </Link>
 
           <Link
             href="/"
-            className="flex items-center gap-2 transition-colors group"
+            className="flex items-center gap-2 transition-colors"
             style={{ color: "var(--text-3)" }}
             onMouseEnter={e => (e.currentTarget.style.color = "var(--text-1)")}
             onMouseLeave={e => (e.currentTarget.style.color = "var(--text-3)")}
@@ -636,166 +648,208 @@ export default function ReportsPage() {
 
           <div className="h-4 w-px" style={{ background: "var(--border)" }} />
 
-          <span className="text-[10px] tracking-[0.18em] uppercase" style={{ color: "var(--text-2)" }}>
-            Reports
-          </span>
-
-          <div className="h-4 w-px" style={{ background: "var(--border)" }} />
-
-          <span className="text-[10px] tracking-[0.18em] uppercase" style={{ color: "var(--text-3)" }}>
+          <span className="text-[10px] tracking-[0.18em] uppercase font-medium" style={{ color: "var(--text-1)" }}>
             New Report
           </span>
 
-          {/* Right — step progress */}
+          {/* Progress bar (right) */}
           <div className="ml-auto flex items-center gap-3">
-            <span className="text-[9px] tracking-[0.18em] uppercase" style={{ color: "var(--text-3)" }}>
-              Step {step + 1} / {STEPS.length}
+            <span className="text-[9px] tracking-[0.18em] uppercase hidden sm:block" style={{ color: "var(--text-3)" }}>
+              {step + 1} / {STEPS.length}
             </span>
-            <div className="flex gap-1">
-              {STEPS.map((_, i) => (
-                <div
-                  key={i}
-                  onClick={() => goTo(i)}
-                  className="cursor-pointer transition-all duration-300 rounded-full"
-                  style={{
-                    width: i === step ? "20px" : "6px",
-                    height: "3px",
-                    background: i === step
-                      ? "var(--champagne)"
-                      : i < step
-                        ? "rgba(0,0,0,0.25)"
-                        : "rgba(0,0,0,0.1)",
-                  }}
-                />
-              ))}
+            <div
+              className="hidden sm:block rounded-full overflow-hidden"
+              style={{ width: "80px", height: "2px", background: "rgba(0,0,0,0.08)" }}
+            >
+              <motion.div
+                className="h-full rounded-full"
+                style={{ background: "var(--champagne)" }}
+                animate={{ width: `${progress}%` }}
+                transition={{ duration: 0.5, ease: [0.16, 1, 0.3, 1] }}
+              />
             </div>
           </div>
         </div>
       </header>
 
-      {/* ── Main layout ───────────────────────────────────────── */}
-      <div className="flex flex-1 max-w-[1440px] mx-auto w-full px-8 md:px-16 pt-20 pb-28 gap-10 xl:gap-16">
+      {/* ── Page body ─────────────────────────────────────────── */}
+      <div className="relative z-10 flex flex-col items-center w-full pt-24 pb-32 px-6">
 
-        {/* ── Left: Step navigator (sticky) ─────────────────── */}
-        <aside
-          className="hidden lg:block shrink-0 sticky"
-          style={{ width: "210px", top: "80px", alignSelf: "flex-start" }}
-        >
-          <p className="field-label mb-4">Steps</p>
-          <div className="space-y-0.5">
+        {/* ── Horizontal step rail ──────────────────────────── */}
+        <div className="w-full max-w-[860px] mb-10">
+          <div className="flex items-start gap-0">
             {STEPS.map((s, i) => {
-              const SIcon    = s.icon;
+              const SIcon   = s.icon;
               const isActive = i === step;
               const isDone   = i < step;
               return (
                 <button
                   key={i}
                   onClick={() => goTo(i)}
-                  className="w-full flex items-center gap-3 px-3 py-2.5 transition-all duration-200 text-left rounded-lg"
-                  style={{
-                    background: isActive ? "rgba(122,80,16,0.06)" : "transparent",
-                    borderLeft: isActive ? `2px solid var(--champagne)` : "2px solid transparent",
-                  }}
+                  className="flex-1 flex flex-col items-center gap-2 group"
+                  style={{ cursor: "pointer" }}
                 >
-                  <div
-                    className="w-6 h-6 flex items-center justify-center shrink-0 rounded"
+                  {/* Line + node */}
+                  <div className="w-full flex items-center">
+                    {/* Left connector */}
+                    <div
+                      className="flex-1 transition-all duration-500"
+                      style={{
+                        height: "1px",
+                        background: i === 0
+                          ? "transparent"
+                          : isDone || isActive
+                            ? "rgba(122,80,16,0.4)"
+                            : "rgba(0,0,0,0.1)",
+                      }}
+                    />
+                    {/* Node */}
+                    <motion.div
+                      animate={{
+                        scale: isActive ? 1.15 : 1,
+                        background: isDone
+                          ? "rgba(122,80,16,0.12)"
+                          : isActive
+                            ? "rgba(122,80,16,0.1)"
+                            : "rgba(0,0,0,0.04)",
+                        borderColor: isDone
+                          ? "rgba(122,80,16,0.5)"
+                          : isActive
+                            ? "var(--champagne)"
+                            : "rgba(0,0,0,0.12)",
+                      }}
+                      transition={{ duration: 0.3 }}
+                      className="w-8 h-8 rounded-full border-[1.5px] flex items-center justify-center shrink-0"
+                    >
+                      {isDone ? (
+                        <Check size={11} strokeWidth={2.5} style={{ color: "var(--champagne)" }} />
+                      ) : (
+                        <SIcon
+                          size={12}
+                          strokeWidth={1.5}
+                          style={{ color: isActive ? "var(--champagne)" : "var(--text-3)" }}
+                        />
+                      )}
+                    </motion.div>
+                    {/* Right connector */}
+                    <div
+                      className="flex-1 transition-all duration-500"
+                      style={{
+                        height: "1px",
+                        background: i === STEPS.length - 1
+                          ? "transparent"
+                          : isDone
+                            ? "rgba(122,80,16,0.4)"
+                            : "rgba(0,0,0,0.1)",
+                      }}
+                    />
+                  </div>
+                  {/* Label — only show active + adjacent on small screens */}
+                  <span
+                    className="text-[8px] tracking-[0.16em] uppercase text-center leading-tight transition-colors duration-200 hidden sm:block"
                     style={{
-                      background: isDone ? "rgba(0,0,0,0.05)" : isActive ? "rgba(122,80,16,0.08)" : "transparent",
-                      border: `1px solid ${isDone ? "rgba(0,0,0,0.12)" : isActive ? "rgba(122,80,16,0.3)" : "rgba(0,0,0,0.08)"}`,
+                      color: isActive ? "var(--text-1)" : isDone ? "rgba(0,0,0,0.35)" : "rgba(0,0,0,0.2)",
+                      fontWeight: isActive ? 600 : 400,
                     }}
                   >
-                    {isDone ? (
-                      <Check size={10} strokeWidth={2.5} style={{ color: "var(--champagne)" }} />
-                    ) : (
-                      <SIcon
-                        size={10}
-                        strokeWidth={1.5}
-                        style={{ color: isActive ? "var(--champagne)" : "var(--text-3)" }}
-                      />
-                    )}
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <p
-                      className="text-[11px] font-medium leading-none truncate"
-                      style={{ color: isActive ? "var(--text-1)" : isDone ? "var(--text-3)" : "var(--text-3)" }}
-                    >
-                      {s.title}
-                    </p>
-                    {isActive && (
-                      <p className="text-[9px] mt-1 leading-none truncate" style={{ color: "var(--text-3)" }}>
-                        {s.subtitle}
-                      </p>
-                    )}
-                  </div>
-                  <span
-                    className="font-bebas text-[13px] shrink-0 tracking-wider"
-                    style={{ color: isActive ? "var(--champagne)" : "rgba(0,0,0,0.15)" }}
-                  >
-                    {s.number}
+                    {s.title}
                   </span>
                 </button>
               );
             })}
           </div>
-        </aside>
+        </div>
 
-        {/* ── Right: Step card ──────────────────────────────── */}
-        <main className="flex-1 min-w-0 flex flex-col">
-          <div className="relative w-full max-w-[640px]" style={{ minHeight: "460px" }}>
-            <AnimatePresence mode="wait" custom={direction}>
-              <motion.div
-                key={step}
-                custom={direction}
-                variants={slideVariants}
-                initial="enter"
-                animate="center"
-                exit="exit"
-                className="module-card module-card-active w-full"
+        {/* ── Wizard card ───────────────────────────────────── */}
+        <div className="w-full max-w-[860px]" style={{ minHeight: "500px", position: "relative" }}>
+          <AnimatePresence mode="wait" custom={direction}>
+            <motion.div
+              key={step}
+              custom={direction}
+              variants={slideVariants}
+              initial="enter"
+              animate="center"
+              exit="exit"
+              className="module-card module-card-active w-full"
+              style={{ background: "var(--surface)" }}
+            >
+              {/* ── Card header ──────────────────────────────── */}
+              <div
+                className="px-10 pt-9 pb-7 border-b"
+                style={{
+                  borderColor: "var(--border)",
+                  background: "linear-gradient(to bottom, rgba(201,169,110,0.04), transparent)",
+                }}
               >
-                {/* Compact card header */}
-                <div className="px-7 pt-6 pb-4 border-b" style={{ borderColor: "var(--border)" }}>
-                  <div className="flex items-center gap-4">
-                    <div
-                      className="w-9 h-9 flex items-center justify-center shrink-0 rounded-lg border"
-                      style={{ background: "rgba(122,80,16,0.06)", borderColor: "rgba(122,80,16,0.2)" }}
-                    >
-                      <StepIcon size={15} strokeWidth={1.2} style={{ color: "var(--champagne)" }} />
-                    </div>
-                    <div className="flex-1">
-                      <div className="flex items-center gap-2 mb-0.5">
-                        <span className="font-bebas text-[10px] tracking-[0.28em]" style={{ color: "var(--text-3)" }}>
-                          {currentStep.number}
-                        </span>
-                        <div className="h-px w-3" style={{ background: "var(--border-mid)" }} />
-                        <span className="text-[9px] tracking-[0.18em] uppercase" style={{ color: "var(--text-3)" }}>
-                          of {STEPS.length}
-                        </span>
-                      </div>
-                      <h1
-                        className="font-bebas tracking-wide leading-none"
-                        style={{ fontSize: "clamp(24px, 3vw, 32px)", color: "var(--text-1)" }}
+                <div className="flex items-start gap-5">
+                  {/* Icon block */}
+                  <div
+                    className="w-12 h-12 flex items-center justify-center shrink-0 rounded-xl border"
+                    style={{
+                      background: "rgba(122,80,16,0.07)",
+                      borderColor: "rgba(122,80,16,0.22)",
+                      boxShadow: "0 4px 14px rgba(122,80,16,0.12)",
+                    }}
+                  >
+                    <StepIcon size={18} strokeWidth={1.2} style={{ color: "var(--champagne)" }} />
+                  </div>
+
+                  {/* Title block */}
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2.5 mb-2">
+                      <span
+                        className="font-bebas text-[11px] tracking-[0.32em] leading-none"
+                        style={{ color: "var(--champagne)", opacity: 0.8 }}
                       >
-                        {currentStep.title}
-                      </h1>
-                      <p className="text-[10px] tracking-[0.12em] uppercase mt-0.5" style={{ color: "var(--text-3)" }}>
-                        {currentStep.subtitle}
-                      </p>
+                        {currentStep.number}
+                      </span>
+                      <div className="h-px w-5" style={{ background: "rgba(122,80,16,0.25)" }} />
+                      <span className="text-[9px] tracking-[0.22em] uppercase" style={{ color: "var(--text-3)" }}>
+                        of {STEPS.length} steps
+                      </span>
                     </div>
+                    <h1
+                      className="font-bebas tracking-wide leading-none mb-1.5"
+                      style={{ fontSize: "clamp(28px, 3.5vw, 38px)", color: "var(--text-1)" }}
+                    >
+                      {currentStep.title}
+                    </h1>
+                    <p
+                      className="text-[11px] tracking-[0.08em] leading-relaxed max-w-[520px]"
+                      style={{ color: "var(--text-3)" }}
+                    >
+                      {currentStep.description}
+                    </p>
+                  </div>
+
+                  {/* Step fraction (top right) */}
+                  <div
+                    className="shrink-0 px-3 py-1.5 rounded-full border text-[9px] tracking-[0.18em] uppercase font-medium hidden md:flex items-center"
+                    style={{
+                      borderColor: "rgba(122,80,16,0.22)",
+                      color: "var(--champagne)",
+                      background: "rgba(122,80,16,0.05)",
+                    }}
+                  >
+                    {step + 1} / {STEPS.length}
                   </div>
                 </div>
+              </div>
 
-                {/* Card body */}
-                <div className="px-7 py-6">
-                  <StepContent stepIndex={step} />
-                </div>
-              </motion.div>
-            </AnimatePresence>
-          </div>
-        </main>
+              {/* ── Card body ────────────────────────────────── */}
+              <div className="px-10 py-8">
+                <StepContent stepIndex={step} />
+              </div>
+            </motion.div>
+          </AnimatePresence>
+        </div>
       </div>
 
       {/* ── Fixed bottom navigation ───────────────────────────── */}
-      <div className="fixed bottom-0 left-0 right-0 z-50 glass-nav border-t" style={{ borderColor: "var(--border)" }}>
+      <div
+        className="fixed bottom-0 left-0 right-0 z-50 glass-nav border-t"
+        style={{ borderColor: "var(--border)" }}
+      >
         <div className="max-w-[1440px] mx-auto px-8 md:px-16 h-16 flex items-center justify-between">
 
           <button
@@ -811,7 +865,12 @@ export default function ReportsPage() {
             Back
           </button>
 
-          {/* Mobile step dots */}
+          {/* Center — step label */}
+          <span className="text-[10px] tracking-[0.18em] uppercase hidden lg:block" style={{ color: "var(--text-3)" }}>
+            {currentStep.title} — {currentStep.subtitle}
+          </span>
+
+          {/* Mobile dots */}
           <div className="flex gap-1.5 lg:hidden">
             {STEPS.map((_, i) => (
               <div
@@ -829,11 +888,6 @@ export default function ReportsPage() {
               />
             ))}
           </div>
-
-          {/* Step label (desktop) */}
-          <span className="hidden lg:block text-[10px] tracking-[0.18em] uppercase" style={{ color: "var(--text-3)" }}>
-            {step + 1} / {STEPS.length} — {currentStep.title}
-          </span>
 
           {/* Continue / Finish */}
           {step < STEPS.length - 1 ? (

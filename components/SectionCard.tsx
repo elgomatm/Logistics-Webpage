@@ -82,7 +82,7 @@ export default function SectionCard({
             background: useTransform(
               [glowX, glowY],
               ([x, y]) =>
-                `radial-gradient(circle at ${x} ${y}, rgba(201,169,110,0.10) 0%, transparent 55%)`
+                `radial-gradient(circle at ${x} ${y}, rgba(201,169,110,0.22) 0%, rgba(201,169,110,0.06) 40%, transparent 65%)`
             ),
             opacity: hovered ? 1 : 0,
             transition: "opacity 0.3s ease",

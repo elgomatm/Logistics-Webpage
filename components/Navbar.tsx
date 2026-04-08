@@ -3,12 +3,13 @@
 import { useEffect, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useSession, signOut } from "next-auth/react";
+import { useRouter, usePathname } from "next/navigation";
 import Image from "next/image";
 
 const navItems = [
-  { label: "Reports", href: "#reports" },
-  { label: "Guides",  href: "#guides"  },
-  { label: "Emails",  href: "#emails"  },
+  { label: "Reports",   href: "#reports",   page: false },
+  { label: "Analytics", href: "/analytics", page: true  },
+  { label: "Settings",  href: "/settings",  page: true  },
 ];
 
 export default function Navbar() {
@@ -16,11 +17,13 @@ export default function Navbar() {
   const [activeSection, setActive] = useState("");
   const [menuOpen, setMenuOpen]    = useState(false);
   const { data: session }          = useSession();
+  const router   = useRouter();
+  const pathname = usePathname();
 
   useEffect(() => {
     const onScroll = () => {
       setScrolled(window.scrollY > 40);
-      const sections = ["reports", "guides", "emails"];
+      const sections = ["reports", "guides", "analytics"];
       for (const id of [...sections].reverse()) {
         const el = document.getElementById(id);
         if (el && window.scrollY >= el.offsetTop - 120) { setActive(id); return; }
@@ -31,9 +34,13 @@ export default function Navbar() {
     return () => window.removeEventListener("scroll", onScroll);
   }, []);
 
-  const scrollTo = (href: string) => {
+  const handleNav = (item: typeof navItems[0]) => {
     setMenuOpen(false);
-    document.getElementById(href.replace("#", ""))?.scrollIntoView({ behavior: "smooth" });
+    if (item.page) {
+      router.push(item.href);
+    } else {
+      document.getElementById(item.href.replace("#", ""))?.scrollIntoView({ behavior: "smooth" });
+    }
   };
 
   const getInitials = () => {
@@ -82,11 +89,13 @@ export default function Navbar() {
           {/* Desktop nav */}
           <div className="hidden md:flex items-center gap-7">
             {navItems.map((item) => {
-              const isActive = activeSection === item.href.replace("#", "");
+              const isActive = item.page
+                ? pathname === item.href
+                : activeSection === item.href.replace("#", "");
               return (
                 <button
                   key={item.href}
-                  onClick={() => scrollTo(item.href)}
+                  onClick={() => handleNav(item)}
                   className="relative text-[11px] tracking-[0.18em] uppercase font-medium transition-colors duration-200"
                   style={{ color: isActive ? "var(--text-1)" : "var(--text-2)" }}
                 >
@@ -189,7 +198,7 @@ export default function Navbar() {
               {navItems.map((item) => (
                 <button
                   key={item.href}
-                  onClick={() => scrollTo(item.href)}
+                  onClick={() => handleNav(item)}
                   className="text-left text-[12px] tracking-[0.18em] uppercase font-medium"
                   style={{ color: "var(--text-1)" }}
                 >

@@ -89,11 +89,12 @@ body {
 }
 
 .module-card-active:hover {
-  border-color: rgba(var(--champ-rgb), 0.45);
+  border-color: rgba(var(--champ-rgb), 0.55);
   box-shadow:
     0 2px 6px rgba(0,0,0,0.04),
-    0 16px 50px rgba(var(--champ-rgb), 0.20),
-    0 28px 70px rgba(0,0,0,0.08);
+    0 16px 50px rgba(var(--champ-rgb), 0.32),
+    0 28px 80px rgba(0,0,0,0.10),
+    0 0 0 1px rgba(var(--champ-rgb), 0.08) inset;
 }
 
 /* ─── Rule ──────────────────────────────────────────────────── */

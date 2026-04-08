@@ -15,7 +15,7 @@ export default function LoginSuccessAnimation() {
     if (sessionStorage.getItem(key)) return;
     sessionStorage.setItem(key, "1");
     setShow(true);
-    const t = setTimeout(() => setShow(false), 3200);
+    const t = setTimeout(() => setShow(false), 3700);
     return () => clearTimeout(t);
   }, [status]);
 
@@ -86,7 +86,7 @@ export default function LoginSuccessAnimation() {
               exit={{ opacity: 0 }}
               transition={{ duration: 0.5, ease: "easeOut", delay: 0.45 }}
               className="text-[11px] tracking-[0.35em] uppercase"
-              style={{ color: "rgba(255,255,255,0.5)" }}
+              style={{ color: "rgba(255,255,255,0.82)" }}
             >
               Welcome back{firstName ? `, ${firstName}` : ""}
             </motion.p>

@@ -7,6 +7,13 @@ export const metadata: Metadata = {
   description:
     "The Exotics Network — Official document management platform for partner reports, guides, and communications.",
   keywords: ["TEN", "Exotics Network", "Event Reports", "Document Studio"],
+  icons: {
+    icon: [
+      { url: "/favicon.ico", sizes: "any" },
+      { url: "/icon.png", type: "image/png", sizes: "512x512" },
+    ],
+    apple: { url: "/apple-icon.png", sizes: "180x180", type: "image/png" },
+  },
 };
 
 export default function RootLayout({

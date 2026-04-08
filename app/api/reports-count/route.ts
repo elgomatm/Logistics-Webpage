@@ -264,12 +264,20 @@ async function countViaSearch(
       };
 
       for (const item of data?.value ?? []) {
-        if (!seenIds.has(item.id) && isReport(item.name)) {
+        const parentPath = item.parentReference?.path ?? "";
+        const pathLower = parentPath.toLowerCase();
+
+        // ⚠️  Only count files that live inside a "Reports" folder.
+        // This prevents personal files (bank statements, resumes, etc.)
+        // from contaminating the count when TEN isn't reachable by direct path.
+        const isInReportsFolder = pathLower.includes("/reports");
+
+        if (!seenIds.has(item.id) && isReport(item.name) && isInReportsFolder) {
           seenIds.add(item.id);
           allFiles.push({
             name: item.name,
             id: item.id,
-            path: item.parentReference?.path ?? "",
+            path: parentPath,
           });
         }
       }

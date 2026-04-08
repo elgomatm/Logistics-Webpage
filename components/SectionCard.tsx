@@ -131,23 +131,19 @@ export default function SectionCard({
             transition={{ type: "spring", stiffness: 300, damping: 20 }}
           >
             {stat.loading ? (
-              /* Spinning arc while count is loading */
-              <svg
-                width="32" height="32" viewBox="0 0 32 32"
-                style={{ color: "var(--champagne)", flexShrink: 0 }}
-              >
-                <motion.circle
-                  cx="16" cy="16" r="12"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="2.5"
-                  strokeLinecap="round"
-                  strokeDasharray="40 36"
-                  animate={{ rotate: 360 }}
-                  transition={{ duration: 1.1, repeat: Infinity, ease: "linear" }}
-                  style={{ originX: "16px", originY: "16px" }}
-                />
-              </svg>
+              /* Pure-CSS spinner — avoids Framer Motion freeze on first paint */
+              <span
+                style={{
+                  display: "inline-block",
+                  width: 28,
+                  height: 28,
+                  flexShrink: 0,
+                  borderRadius: "50%",
+                  border: "2.5px solid rgba(201,169,110,0.22)",
+                  borderTopColor: "var(--champagne)",
+                  animation: "spin 0.9s linear infinite",
+                }}
+              />
             ) : (
               <span className="font-bebas text-[36px] leading-none tracking-wider" style={{ color: "var(--champagne)" }}>
                 {stat.value}

@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { motion, AnimatePresence } from "framer-motion";
+import { AnimatePresence, motion } from "framer-motion";
 import { useSession, signOut } from "next-auth/react";
 import { useRouter, usePathname } from "next/navigation";
 import Image from "next/image";
@@ -58,12 +58,7 @@ export default function Navbar() {
 
   return (
     <>
-      <motion.nav
-        initial={{ y: -80, opacity: 0 }}
-        animate={{ y: 0, opacity: 1 }}
-        transition={{ duration: 0.7, ease: [0.16, 1, 0.3, 1] }}
-        className={`fixed top-0 left-0 right-0 z-50 transition-all duration-500 ${scrolled ? "glass-nav" : "glass-nav"}`}
-      >
+      <nav className={`fixed top-0 left-0 right-0 z-50 glass-nav anim-fade-in`}>
         <div className="max-w-[1360px] mx-auto px-6 md:px-14 h-16 flex items-center justify-between">
 
           {/* Left — wordmark, navigates home */}
@@ -181,7 +176,7 @@ export default function Navbar() {
             ))}
           </button>
         </div>
-      </motion.nav>
+      </nav>
 
       {/* Mobile menu */}
       <AnimatePresence>

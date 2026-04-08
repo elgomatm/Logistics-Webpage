@@ -28,17 +28,23 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
     authorized({ auth }) {
       return !!auth?.user;
     },
-    // Persist the Microsoft access token inside the JWT so API routes can use it
+    // Persist the Microsoft access token AND refresh token inside the JWT
     async jwt({ token, account }) {
       if (account?.access_token) {
         token.accessToken = account.access_token;
         token.expiresAt = account.expires_at;
       }
+      // Capture the refresh token so it can be stored as a Vercel env var
+      // for server-side OneDrive access without requiring an active user session.
+      if (account?.refresh_token) {
+        token.refreshToken = account.refresh_token;
+      }
       return token;
     },
-    // Expose the access token on the session object available to client components
+    // Expose both tokens on the session object available to API routes
     async session({ session, token }) {
       session.accessToken = token.accessToken as string | undefined;
+      session.refreshToken = token.refreshToken as string | undefined;
       return session;
     },
   },

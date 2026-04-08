@@ -237,7 +237,41 @@ async function scanViaGraph(token: string, userDriveBase: string) {
   return { total, events: sortedEvents, years, synced: true, source: "graph" };
 }
 
-// ── App-credential token ─────────────────────────────────────────────────────
+// ── Refresh token → fresh access token ──────────────────────────────────────
+
+/**
+ * Exchange a stored refresh token for a fresh access token.
+ * Uses ONEDRIVE_REFRESH_TOKEN env var — set this once via /api/setup-token.
+ * This lets the app read OneDrive 24/7 without any user being signed in.
+ */
+async function getAccessTokenFromRefreshToken(): Promise<string | null> {
+  const refreshToken = process.env.ONEDRIVE_REFRESH_TOKEN;
+  const { AZURE_TENANT_ID, AZURE_CLIENT_ID, AZURE_CLIENT_SECRET } = process.env;
+  if (!refreshToken || !AZURE_TENANT_ID || !AZURE_CLIENT_ID || !AZURE_CLIENT_SECRET) return null;
+  try {
+    const res = await fetch(
+      `https://login.microsoftonline.com/${AZURE_TENANT_ID}/oauth2/v2.0/token`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        body: new URLSearchParams({
+          client_id: AZURE_CLIENT_ID,
+          client_secret: AZURE_CLIENT_SECRET,
+          grant_type: "refresh_token",
+          refresh_token: refreshToken,
+          scope: "https://graph.microsoft.com/Files.Read offline_access",
+        }),
+        cache: "no-store",
+      }
+    );
+    const data = await res.json();
+    return data.access_token ?? null;
+  } catch {
+    return null;
+  }
+}
+
+// ── App-credential token (fallback — requires admin consent) ─────────────────
 
 async function getAppGraphToken(): Promise<string | null> {
   const { AZURE_TENANT_ID, AZURE_CLIENT_ID, AZURE_CLIENT_SECRET } = process.env;
@@ -303,7 +337,21 @@ function countViaFilesystem() {
 
 export async function GET() {
   try {
-    // Strategy 1: delegated (signed-in user's session token)
+    // Strategy 1: stored refresh token (preferred — works without active user session)
+    // Set ONEDRIVE_REFRESH_TOKEN in Vercel via the /api/setup-token endpoint.
+    const refreshAccessToken = await getAccessTokenFromRefreshToken();
+    if (refreshAccessToken) {
+      const result = await scanViaGraph(
+        refreshAccessToken,
+        "https://graph.microsoft.com/v1.0/me/drive"
+      );
+      if (result) return NextResponse.json(
+        { ...result, source: "refresh_token" },
+        { headers: { "Cache-Control": "no-store" } }
+      );
+    }
+
+    // Strategy 2: active user session (works when someone is signed in)
     const session = await auth();
     if (session?.accessToken) {
       const result = await scanViaGraph(
@@ -313,7 +361,7 @@ export async function GET() {
       if (result) return NextResponse.json(result, { headers: { "Cache-Control": "no-store" } });
     }
 
-    // Strategy 2: app credentials
+    // Strategy 3: app credentials (requires admin consent in Azure)
     const appToken = await getAppGraphToken();
     const userId = process.env.ONEDRIVE_USER_EMAIL;
     if (appToken && userId) {

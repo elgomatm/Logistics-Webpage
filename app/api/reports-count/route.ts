@@ -16,6 +16,7 @@
  */
 
 import { NextResponse } from "next/server";
+import { unstable_cache } from "next/cache";
 import { existsSync, readdirSync } from "fs";
 import { join } from "path";
 import { auth } from "@/auth";
@@ -83,57 +84,51 @@ async function graphChildByName(
 }
 
 /**
- * Discover the TEN folder in the user's drive root.
- * Handles both regular folders and OneDrive shortcuts (remoteItem).
- * Returns { driveBase, itemId } that can be used for subsequent calls.
+ * Discover the TEN folder.
+ * TEN lives on Adonis Ordonez's OneDrive and is shared with the signed-in user,
+ * so it does NOT appear in me/drive at all. We find it via sharedWithMe.
  */
 async function findTENFolder(
   token: string,
   userDriveBase: string
 ): Promise<{ driveBase: string; itemId: string } | null> {
-  // 1. Try root children listing
+  // 1. Check sharedWithMe — TEN is shared from Adonis Ordonez's OneDrive
+  console.log("[findTEN] checking sharedWithMe...");
+  const sharedUrl = `https://graph.microsoft.com/v1.0/me/drive/sharedWithMe?$select=name,id,remoteItem&$top=200`;
+  const sharedRes = await fetch(sharedUrl, {
+    headers: { Authorization: `Bearer ${token}` },
+    cache: "no-store",
+  });
+  console.log("[findTEN] sharedWithMe status:", sharedRes.status);
+  if (sharedRes.ok) {
+    const sharedData = await sharedRes.json();
+    const sharedItems = (sharedData?.value ?? []) as DriveItem[];
+    console.log("[findTEN] sharedWithMe items:", sharedItems.map((i) => `${i.name}${i.remoteItem ? "(remote)" : ""}`));
+    const tenShared = sharedItems.find((i) => i.name.toLowerCase() === "ten");
+    if (tenShared) {
+      console.log("[findTEN] found TEN in sharedWithMe!");
+      return resolveItem(tenShared, userDriveBase);
+    }
+    console.log("[findTEN] TEN not in sharedWithMe, checking root...");
+  }
+
+  // 2. Fall back to root children (in case TEN is added to personal drive later)
   const rootUrl = `${userDriveBase}/root/children?$select=name,id,folder,remoteItem&$top=500`;
   const rootRes = await fetch(rootUrl, {
     headers: { Authorization: `Bearer ${token}` },
     cache: "no-store",
   });
-  console.log("[findTEN] root/children status:", rootRes.status);
-  if (!rootRes.ok) {
-    const errText = await rootRes.text();
-    console.log("[findTEN] root/children FAILED:", errText.slice(0, 300));
-    return null;
-  }
-  const rootData = await rootRes.json();
-  const rootItems = (rootData?.value ?? []) as DriveItem[];
-
-  console.log("[findTEN] root items:", rootItems.map((i) => `${i.name}(${i.folder ? "folder" : "file"}${i.remoteItem ? "/remote" : ""})`));
-  const tenItem = rootItems.find((i) => i.name.toLowerCase() === "ten");
-  if (tenItem) {
-    console.log("[findTEN] found TEN in root:", tenItem.name, tenItem.remoteItem ? "(shortcut)" : "(folder)");
-    return resolveItem(tenItem, userDriveBase);
-  }
-
-  // 2. If not in root, search for it
-  console.log("[findTEN] TEN not in root, searching...");
-  const searchUrl = `${userDriveBase}/root/search(q='TEN')?$select=name,id,folder,remoteItem&$top=50`;
-  const searchRes = await fetch(searchUrl, {
-    headers: { Authorization: `Bearer ${token}` },
-    cache: "no-store",
-  });
-  if (searchRes.ok) {
-    const searchData = await searchRes.json();
-    const searchItems = (searchData?.value ?? []) as DriveItem[];
-    console.log("[findTEN] search results:", searchItems.map((i) => i.name));
-    const exactMatch = searchItems.find(
-      (i) => i.name === "TEN" && i.folder
-    );
-    if (exactMatch) {
-      console.log("[findTEN] found TEN via search");
-      return resolveItem(exactMatch, userDriveBase);
+  if (rootRes.ok) {
+    const rootData = await rootRes.json();
+    const rootItems = (rootData?.value ?? []) as DriveItem[];
+    const tenItem = rootItems.find((i) => i.name.toLowerCase() === "ten");
+    if (tenItem) {
+      console.log("[findTEN] found TEN in root");
+      return resolveItem(tenItem, userDriveBase);
     }
   }
 
-  console.log("[findTEN] FAILED - TEN not found anywhere");
+  console.log("[findTEN] FAILED - TEN not found in sharedWithMe or root");
   return null;
 }
 
@@ -169,11 +164,17 @@ async function countViaDirectPath(
   token: string,
   year: string
 ): Promise<{ total: number; events: EventResult[]; years: string[]; synced: boolean; source: string } | null> {
-  const driveBase = "https://graph.microsoft.com/v1.0/me/drive";
+  const userDriveBase = "https://graph.microsoft.com/v1.0/me/drive";
 
-  // Step 1: list all event folders under TEN/Events/{year}
-  const eventsUrl =
-    `${driveBase}/root:/TEN/Events/${year}:/children?$select=name,id,folder,remoteItem&$top=500`;
+  // Step 0: Find TEN (it's shared from Adonis Ordonez's OneDrive, not on me/drive)
+  const ten = await findTENFolder(token, userDriveBase);
+  if (!ten) {
+    console.log("[direct_path] FAILED - could not locate TEN folder");
+    return null;
+  }
+
+  // Step 1: Navigate TEN → Events → {year}
+  const eventsUrl = `${ten.driveBase}/items/${ten.itemId}:/Events/${year}:/children?$select=name,id,folder,remoteItem&$top=500`;
   console.log("[direct_path] fetching events url:", eventsUrl);
   const eventsRes: Response = await fetch(eventsUrl, {
     headers: { Authorization: `Bearer ${token}` },
@@ -199,7 +200,7 @@ async function countViaDirectPath(
     eventFolders.map(async (event): Promise<EventResult> => {
       const { driveBase: edb, itemId: eid } = resolveItem(
         event,
-        driveBase
+        ten.driveBase
       );
 
       // Check Documents/Reports — and one level deeper in case reports are in a subfolder
@@ -560,39 +561,27 @@ function countViaFilesystem() {
   return { total, events, years: yearFolders, synced: true, source: "filesystem" };
 }
 
-// ── Route handler ────────────────────────────────────────────────────────────
+// ── Cached fetch — persists result in Vercel Data Cache for 1 hour ───────────
+// unstable_cache stores the result server-side so every visitor gets an instant
+// response after the first fetch. The cron job at /api/warm-cache keeps it warm.
 
-export async function GET() {
-  try {
+const fetchReportsCount = unstable_cache(
+  async (): Promise<{ total: number; events: EventResult[]; years: string[]; synced: boolean; source: string; refreshTokenError?: string }> => {
     const DRIVE_BASE = "https://graph.microsoft.com/v1.0/me/drive";
-    const NO_CACHE = { "Cache-Control": "no-store" };
-
     const currentYear = new Date().getFullYear().toString();
-    console.log("[reports-count] ===== START =====", { currentYear, NODE_ENV: process.env.NODE_ENV });
+    console.log("[reports-count] cache MISS — fetching fresh data", { currentYear });
 
-    // ── Strategy 0: local filesystem — use first in dev (always accurate) ────
-    if (process.env.NODE_ENV !== "production") {
-      console.log("[reports-count] trying filesystem first (dev mode)");
-      const fsResult = countViaFilesystem();
-      if (fsResult) {
-        console.log("[reports-count] filesystem SUCCESS:", fsResult.total, "total files");
-        return NextResponse.json(fsResult, { headers: NO_CACHE });
-      }
-      console.log("[reports-count] filesystem not available, falling through to Graph API");
-    }
-
-    // ── Helper: try all strategies with a given token ────────────────────────
     async function tryWithToken(token: string, label: string) {
-      // Strategy A: search me/drive (personal OneDrive + synced SharePoint)
-      console.log(`[reports-count] [${label}] trying search on me/drive...`);
-      const searchResult = await countViaSearch(token, DRIVE_BASE);
-      if (searchResult && searchResult.total > 0) {
-        console.log(`[reports-count] [${label}] me/drive search SUCCESS:`, searchResult.total, "files");
-        return NextResponse.json({ ...searchResult, source: `${label}_search` }, { headers: NO_CACHE });
+      // Primary: sharedWithMe → TEN → Events → year (correct path for Adonis's shared drive)
+      console.log(`[reports-count] [${label}] trying direct path via sharedWithMe...`);
+      const directResult = await countViaDirectPath(token, currentYear);
+      if (directResult && directResult.total > 0) {
+        console.log(`[reports-count] [${label}] direct path SUCCESS:`, directResult.total, "files");
+        return { ...directResult, source: `${label}_direct` };
       }
-      console.log(`[reports-count] [${label}] me/drive search returned 0, trying all drives...`);
 
-      // Strategy B: enumerate all drives (finds the SharePoint org drive where TEN lives)
+      // Fallback: search across all drives the user has access to
+      console.log(`[reports-count] [${label}] direct path failed, searching all drives...`);
       const drivesRes = await fetch(`https://graph.microsoft.com/v1.0/me/drives`, {
         headers: { Authorization: `Bearer ${token}` },
         cache: "no-store",
@@ -600,81 +589,80 @@ export async function GET() {
       if (drivesRes.ok) {
         const drivesData = await drivesRes.json() as { value?: Array<{ id: string; name: string; driveType: string }> };
         const drives = drivesData?.value ?? [];
-        console.log(`[reports-count] [${label}] drives found:`, drives.map((d) => `${d.name}(${d.driveType})`));
-
+        console.log(`[reports-count] [${label}] drives:`, drives.map((d) => `${d.name}(${d.driveType})`));
         for (const drive of drives) {
           const driveBase = `https://graph.microsoft.com/v1.0/drives/${drive.id}`;
-          console.log(`[reports-count] [${label}] searching drive: ${drive.name}`);
-          const driveSearch = await countViaSearch(token, driveBase);
-          if (driveSearch && driveSearch.total > 0) {
-            console.log(`[reports-count] [${label}] drive ${drive.name} SUCCESS:`, driveSearch.total, "files");
-            return NextResponse.json({ ...driveSearch, source: `${label}_drive_${drive.name}` }, { headers: NO_CACHE });
+          const result = await countViaSearch(token, driveBase);
+          if (result && result.total > 0) {
+            console.log(`[reports-count] [${label}] found ${result.total} files on drive: ${drive.name}`);
+            return { ...result, source: `${label}_drive` };
           }
         }
       }
 
-      // Strategy C: direct path on me/drive
-      console.log(`[reports-count] [${label}] trying direct path...`);
-      const directResult = await countViaDirectPath(token, currentYear);
-      if (directResult) {
-        console.log(`[reports-count] [${label}] direct path SUCCESS:`, directResult.total, "files");
-        return NextResponse.json({ ...directResult, source: `${label}_direct` }, { headers: NO_CACHE });
+      // Last resort: search personal drive
+      const searchResult = await countViaSearch(token, DRIVE_BASE);
+      if (searchResult && searchResult.total > 0) {
+        console.log(`[reports-count] [${label}] personal drive search found:`, searchResult.total);
+        return { ...searchResult, source: `${label}_search` };
       }
 
-      console.log(`[reports-count] [${label}] ALL strategies failed`);
       return null;
     }
 
-    // ── Strategy 1: stored refresh token ─────────────────────────────────────
+    // Auth strategy 1: stored refresh token (works 24/7)
     const hasRefreshToken = !!process.env.ONEDRIVE_REFRESH_TOKEN;
     console.log("[reports-count] ONEDRIVE_REFRESH_TOKEN present:", hasRefreshToken);
     const rtResult = await getAccessTokenFromRefreshToken();
-    if (rtResult?.error) console.log("[reports-count] refresh token exchange error:", rtResult.error);
+    if (rtResult?.error) console.log("[reports-count] refresh token error:", rtResult.error);
     if (rtResult?.token) {
-      console.log("[reports-count] got access token from refresh token, trying...");
-      const res = await tryWithToken(rtResult.token, "refresh_token");
-      if (res) return res;
-    } else {
-      console.log("[reports-count] no token from refresh token exchange, skipping");
+      const result = await tryWithToken(rtResult.token, "refresh_token");
+      if (result) return result;
     }
 
-    // ── Strategy 2: active user session ──────────────────────────────────────
+    // Auth strategy 2: active session
     const session = await auth();
-    console.log("[reports-count] session present:", !!session, "| accessToken present:", !!session?.accessToken);
+    console.log("[reports-count] session accessToken present:", !!session?.accessToken);
     if (session?.accessToken) {
-      const res = await tryWithToken(session.accessToken, "session");
-      if (res) return res;
+      const result = await tryWithToken(session.accessToken, "session");
+      if (result) return result;
     }
 
-    // ── Strategy 3: app credentials ───────────────────────────────────────────
-    const appToken = await getAppGraphToken();
-    const userId = process.env.ONEDRIVE_USER_EMAIL;
-    console.log("[reports-count] app token present:", !!appToken, "| ONEDRIVE_USER_EMAIL:", userId ?? "NOT SET");
-    if (appToken && userId) {
-      const result = await scanViaGraph(
-        appToken,
-        `https://graph.microsoft.com/v1.0/users/${encodeURIComponent(userId!)}/drive`
-      );
-      if (result) return NextResponse.json(result, { headers: NO_CACHE });
-    }
-
-    // ── Strategy 4: local filesystem (last resort) ────────────────────────────
+    // Auth strategy 3: filesystem (dev only)
     const fsResult = countViaFilesystem();
     if (fsResult) {
-      console.log("[reports-count] filesystem fallback SUCCESS:", fsResult.total);
-      return NextResponse.json(fsResult, { headers: NO_CACHE });
+      console.log("[reports-count] filesystem fallback:", fsResult.total, "files");
+      return fsResult;
     }
 
     const rtError = rtResult?.error;
-    console.log("[reports-count] ===== ALL STRATEGIES FAILED =====", { rtError });
-    return NextResponse.json(
-      {
-        total: 0, events: [], years: [], synced: false, source: "none",
-        hint: "Sign in with Microsoft to connect OneDrive.",
-        ...(rtError && { refreshTokenError: rtError }),
+    console.log("[reports-count] ===== ALL STRATEGIES FAILED =====");
+    return {
+      total: 0, events: [], years: [], synced: false, source: "none",
+      ...(rtError && { refreshTokenError: rtError }),
+    };
+  },
+  ["reports-count-v1"],          // cache key
+  { revalidate: 3600 }           // refresh every hour
+);
+
+// ── Route handler ────────────────────────────────────────────────────────────
+
+export async function GET() {
+  try {
+    // Dev: always use filesystem so local changes are reflected immediately
+    if (process.env.NODE_ENV !== "production") {
+      const fsResult = countViaFilesystem();
+      if (fsResult) return NextResponse.json(fsResult);
+    }
+
+    const data = await fetchReportsCount();
+    return NextResponse.json(data, {
+      headers: {
+        // Tell the browser not to cache — freshness is handled server-side
+        "Cache-Control": "no-store",
       },
-      { headers: NO_CACHE }
-    );
+    });
   } catch (err) {
     console.log("[reports-count] UNCAUGHT ERROR:", err);
     return NextResponse.json(

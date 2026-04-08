@@ -53,13 +53,11 @@ export default function SectionCard({
         </div>
 
         <h2
-          className="leading-none"
+          className="font-bebas tracking-wide leading-none"
           style={{
-            fontSize: "clamp(26px, 2.2vw, 34px)",
-            fontFamily: "var(--font-inter)",
-            fontWeight: 800,
-            letterSpacing: "-0.025em",
+            fontSize: "clamp(28px, 2.4vw, 38px)",
             color: isActive ? "var(--text-1)" : "var(--text-3)",
+            WebkitTextStroke: isActive ? "0.4px currentColor" : "0px",
           }}
         >
           {title}

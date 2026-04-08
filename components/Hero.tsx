@@ -1,41 +1,43 @@
 "use client";
 
 import { motion } from "framer-motion";
+import Image from "next/image";
 
 export default function WorkspaceHeader() {
   return (
-    <section className="relative pt-28 pb-12 px-6 md:px-14 max-w-[1360px] mx-auto">
+    <section className="relative pt-24 pb-10 px-6 md:px-14 max-w-[1360px] mx-auto">
       <motion.div
         initial={{ opacity: 0, y: 16 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.7, ease: [0.16, 1, 0.3, 1], delay: 0.15 }}
         className="flex flex-col md:flex-row md:items-end justify-between gap-6"
       >
-        {/* Left — Title */}
+        {/* Left — Logo block */}
         <div>
-          <div className="flex items-center gap-3 mb-4">
+          {/* TEN logo — inverted to black for light background */}
+          <div className="mb-3 select-none" style={{ width: "clamp(180px, 22vw, 300px)" }}>
+            <Image
+              src="/ten-logo.png"
+              alt="The Exotics Network"
+              width={1000}
+              height={349}
+              priority
+              style={{
+                width: "100%",
+                height: "auto",
+                filter: "invert(1)",
+                opacity: 0.88,
+              }}
+            />
+          </div>
+
+          {/* Eyebrow — sits right under the logo */}
+          <div className="flex items-center gap-3">
             <div className="w-5 h-px" style={{ background: "var(--border-mid)" }} />
             <span className="text-[10px] tracking-[0.28em] uppercase font-medium" style={{ color: "var(--text-3)" }}>
               The Exotics Network
             </span>
           </div>
-
-          <h1
-            className="leading-none"
-            style={{
-              fontSize: "clamp(44px, 6.5vw, 80px)",
-              color: "var(--text-1)",
-              fontFamily: "var(--font-inter)",
-              fontWeight: 900,
-              letterSpacing: "-0.03em",
-            }}
-          >
-            Document Studio
-          </h1>
-
-          <p className="mt-3 text-[13px] tracking-wide max-w-md leading-relaxed" style={{ color: "var(--text-2)" }}>
-            Official document management for TEN. Select a module below.
-          </p>
         </div>
 
         {/* Right — Meta */}

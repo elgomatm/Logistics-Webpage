@@ -314,17 +314,11 @@ body {
   animation: fade-in 0.5s ease both;
 }
 
-/* ─── Instant dark cover set by inline <head> script before first paint ── */
-html[data-welcome="1"] body::before {
-  content: '';
-  position: fixed;
-  inset: 0;
-  background: #090909;
-  z-index: 998;
-  pointer-events: none;
-}
-
 /* ─── Welcome animation keyframes (GPU only — no JS per frame) ── */
+@keyframes w-overlay {
+  0%   { opacity: 0.6; }
+  100% { opacity: 0; }
+}
 @keyframes w-ring-a {
   0%   { transform: scale(0);   opacity: 0.55; }
   100% { transform: scale(3.5); opacity: 0; }
@@ -360,11 +354,12 @@ html[data-welcome="1"] body::before {
   animation: w-out 0.55s cubic-bezier(0.4, 0, 1, 1) forwards;
 }
 
-/* overlay — solid from frame 1, picks up seamlessly from body::before */
+/* overlay */
 .ten-welcome__overlay {
   position: absolute; inset: 0;
   background: #090909;
-  opacity: 1;
+  animation: w-overlay 2.0s 0.7s ease-out forwards;
+  will-change: opacity;
 }
 
 /* rings */

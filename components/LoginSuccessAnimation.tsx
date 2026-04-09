@@ -1,45 +1,35 @@
 "use client";
 
-import { useEffect, useLayoutEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import { useSession } from "next-auth/react";
 
-// useLayoutEffect on client (fires before paint), useEffect on server (SSR no-op)
-const useIsomorphicLayoutEffect =
-  typeof window !== "undefined" ? useLayoutEffect : useEffect;
-
 /**
- * Welcome-back splash.
- *
- * Anti-FOUC pattern:
- *   1. Inline <script> in layout.tsx sets data-welcome="1" on <html> before first paint.
- *   2. CSS rule covers the page with solid #090909 from frame 0 — user never sees
- *      the page flash in before the overlay.
- *   3. useLayoutEffect (client, before repaint) removes data-welcome and mounts
- *      this component's own overlay atomically — no gap, no flash.
- *   4. Decorative elements (rings, logo, text) animate in via CSS keyframes.
- *   5. Whole wrapper fades out at 3.1 s, unmounts at 3.7 s.
+ * Welcome-back splash — 100% CSS keyframe animations.
+ * No Framer Motion, no JS per frame, no layout jank.
+ * GPU compositor handles every transition.
  */
 export default function LoginSuccessAnimation() {
-  const { data: session } = useSession();
+  const { data: session, status } = useSession();
   const [phase, setPhase] = useState<"hidden" | "show" | "exit">("hidden");
 
-  useIsomorphicLayoutEffect(() => {
-    // Always remove the inline-script blocker — component takes over (or reveals page)
-    document.documentElement.removeAttribute("data-welcome");
-
+  useEffect(() => {
+    if (status !== "authenticated") return;
     const key = "ten_login_welcomed";
-    if (sessionStorage.getItem(key)) return; // already shown this session
+    if (sessionStorage.getItem(key)) return;
     sessionStorage.setItem(key, "1");
 
     setPhase("show");
 
+    // Begin CSS exit animation at 3.1 s
     const exitTimer = setTimeout(() => setPhase("exit"), 3100);
+    // Fully unmount after exit animation finishes (0.55 s)
     const hideTimer = setTimeout(() => setPhase("hidden"), 3700);
+
     return () => {
       clearTimeout(exitTimer);
       clearTimeout(hideTimer);
     };
-  }, []);
+  }, [status]);
 
   if (phase === "hidden") return null;
 
@@ -47,7 +37,7 @@ export default function LoginSuccessAnimation() {
 
   return (
     <div className={`ten-welcome${phase === "exit" ? " exiting" : ""}`}>
-      {/* Solid dark overlay — matches body::before so handoff is seamless */}
+      {/* Dark overlay — fades out via CSS */}
       <div className="ten-welcome__overlay" />
 
       <div className="ten-welcome__content">

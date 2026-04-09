@@ -1024,7 +1024,7 @@ export default function ReportWizard() {
   ];
 
   return (
-    <div className="min-h-screen" style={{ background: "var(--bg)" }}>
+    <div className="min-h-screen" style={{ background: "#0a0a0a" }}>
       {generating && (
         <ProgressOverlay
           partners={partners}

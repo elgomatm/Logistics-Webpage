@@ -55,7 +55,7 @@ class PhotoEntry:
 
 @dataclass
 class GallerySlide:
-    """One gallery slide: a title + exactly 6 photos (None = slot left empty)."""
+    """One gallery slide: a title + exactly 7 photos (None = slot left empty)."""
     title: str = ""
     photos: list[Optional[PhotoEntry]] = field(default_factory=list)
 
@@ -93,8 +93,8 @@ class ReportManifest:
     testimonials: list[Testimonial] = field(default_factory=list)
 
     # ── Photo galleries ───────────────────────────────────────────────────
-    # Up to 3 gallery slides (standard), each with a title + 6 photos.
-    # Photos are in left-column-first order: L1, L2, L3, R1, R2, R3.
+    # Up to 3 gallery slides (standard), each with a title + 7 photos.
+    # Photos are in left-column-first order: L1, L2, L3, L4, R1, R2, R3.
     # None entries = slot left empty (shows slide background).
     gallery_slides: list[GallerySlide] = field(default_factory=list)
 
@@ -140,12 +140,12 @@ def manifest_from_dict(d: dict) -> ReportManifest:
         if not isinstance(rs, dict):
             continue
         photos = [_parse_photo_entry(p) for p in rs.get("photos", [])]
-        # Pad / trim to exactly 6
-        while len(photos) < 6:
+        # Pad / trim to exactly 7
+        while len(photos) < 7:
             photos.append(None)
         gallery_slides.append(GallerySlide(
             title=rs.get("title", ""),
-            photos=photos[:6],
+            photos=photos[:7],
         ))
 
     return ReportManifest(

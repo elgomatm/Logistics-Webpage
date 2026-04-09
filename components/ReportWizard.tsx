@@ -24,18 +24,19 @@ interface GallerySlide {
   photos: (PhotoCrop | null)[];  // always 6 elements
 }
 const makeEmptySlide = (): GallerySlide => ({
-  title: "", photos: Array(6).fill(null) as null[],
+  title: "", photos: Array(7).fill(null) as null[],
 });
 
 // Slot layout from slideLayout3.xml (% of slide dims, portrait 8.5×11)
-// Order: L1 L2 L3 R1 R2 R3
+// Order: L1 L2 L3 L4 R1 R2 R3  (7 slots)
 const PHOTO_SLOTS = [
-  { l: 6.793,  t: 17.045, w: 42.824, h: 18.091 },
-  { l: 6.793,  t: 35.510, w: 42.824, h: 18.091 },
-  { l: 6.793,  t: 53.975, w: 42.824, h: 18.091 },
-  { l: 50.196, t: 17.045, w: 42.941, h: 24.182 },
-  { l: 50.196, t: 41.606, w: 42.941, h: 24.364 },
-  { l: 50.196, t: 66.348, w: 42.941, h: 24.182 },
+  { l: 6.793,  t: 17.045, w: 42.824, h: 18.091 }, // L1 idx=20
+  { l: 6.793,  t: 35.510, w: 42.824, h: 18.091 }, // L2 idx=26
+  { l: 6.793,  t: 53.975, w: 42.824, h: 18.091 }, // L3 idx=27
+  { l: 6.793,  t: 72.439, w: 42.824, h: 18.091 }, // L4 idx=28
+  { l: 50.196, t: 17.045, w: 42.941, h: 24.182 }, // R1 idx=17
+  { l: 50.196, t: 41.606, w: 42.941, h: 24.364 }, // R2 idx=29
+  { l: 50.196, t: 66.348, w: 42.941, h: 24.182 }, // R3 idx=30
 ] as const;
 
 interface WizardState {
@@ -733,7 +734,7 @@ function GalleryStep({
           style={{ paddingBottom: `${(10_058_400 / 7_772_400) * 100}%` }}
         >
           <div className="absolute inset-0">
-            {Array.from({ length: 6 }, (_, pi) => (
+            {Array.from({ length: 7 }, (_, pi) => (
               <PhotoSlot
                 key={pi}
                 slotIndex={pi}

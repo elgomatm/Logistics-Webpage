@@ -1,17 +1,17 @@
 """
 Photo gallery slides (slides 12–14 in template = user slides 1–3).
 
-Standard: 3 gallery slides, each with exactly 6 photo placeholders.
+Standard: 3 gallery slides, each with exactly 7 photo placeholders.
 
-Slot layout (from slideLayout3.xml) — 6 slots, left column first:
+Slot layout (from slideLayout3.xml) — 7 slots, left column first:
   Slot 0  idx=20  L1  x=6.793%  y=17.045%  w=42.824%  h=18.091%  ar≈1.829
   Slot 1  idx=26  L2  x=6.793%  y=35.510%  w=42.824%  h=18.091%  ar≈1.829
   Slot 2  idx=27  L3  x=6.793%  y=53.975%  w=42.824%  h=18.091%  ar≈1.829
-  Slot 3  idx=17  R1  x=50.196% y=17.045%  w=42.941%  h=24.182%  ar≈1.372
-  Slot 4  idx=29  R2  x=50.196% y=41.606%  w=42.941%  h=24.364%  ar≈1.362
-  Slot 5  idx=30  R3  x=50.196% y=66.348%  w=42.941%  h=24.182%  ar≈1.372
+  Slot 3  idx=28  L4  x=6.793%  y=72.439%  w=42.824%  h=18.091%  ar≈1.829
+  Slot 4  idx=17  R1  x=50.196% y=17.045%  w=42.941%  h=24.182%  ar≈1.372
+  Slot 5  idx=29  R2  x=50.196% y=41.606%  w=42.941%  h=24.364%  ar≈1.362
+  Slot 6  idx=30  R3  x=50.196% y=66.348%  w=42.941%  h=24.182%  ar≈1.372
 
-idx=28 (4th left slot) is REMOVED from every gallery slide (slide background shows).
 idx=4294967295 is the master-inherited frosted-glass header — NEVER touched.
 
 Title text: "Text Placeholder 7" — sz=3800 (38pt) — normAutofit enabled.
@@ -37,17 +37,15 @@ GALLERY_SLIDE_NAMES = ["slide12.xml", "slide13.xml", "slide14.xml"]
 # Extra template gallery slides — deleted from output if not needed
 GALLERY_EXTRA_SLIDES = ["slide15.xml", "slide16.xml", "slide17.xml", "slide18.xml"]
 
-# The 6 active slot placeholder indices, in UI/manifest order (L1 L2 L3 R1 R2 R3)
-SLOT_INDICES = ["20", "26", "27", "17", "29", "30"]
-
-# 4th-left slot: idx=28 — always removed (gives us the 6-slot layout)
-REMOVE_IDX = "28"
+# The 7 slot placeholder indices, in UI/manifest order (L1 L2 L3 L4 R1 R2 R3)
+SLOT_INDICES = ["20", "26", "27", "28", "17", "29", "30"]
 
 # Actual placeholder dimensions from slideLayout3.xml (EMU)
 SLOT_DIMS: dict[str, tuple[int, int]] = {
     "20": (3_328_416, 1_819_656),   # ar ≈ 1.829
     "26": (3_328_416, 1_819_656),
     "27": (3_328_416, 1_819_656),
+    "28": (3_328_416, 1_819_656),
     "17": (3_337_560, 2_432_304),   # ar ≈ 1.372
     "29": (3_337_560, 2_450_592),   # ar ≈ 1.362
     "30": (3_337_560, 2_432_304),
@@ -334,14 +332,11 @@ def edit(
         xml  = read_slide(unpacked_dir, tmpl_slide)
         rels = read_rels(unpacked_dir, tmpl_slide)
 
-        # 1. Remove the 4th-left slot (idx=28) — gives clean 6-slot layout
-        xml = _remove_pic_by_idx(xml, REMOVE_IDX)
-
-        # 2. Update gallery title
+        # 1. Update gallery title
         if user_slide.title:
             xml = _update_gallery_title(xml, user_slide.title)
 
-        # 3. Inject photos into their slots
+        # 2. Inject photos into their slots
         for slot_i, idx in enumerate(SLOT_INDICES):
             photo_entry = (
                 user_slide.photos[slot_i]
@@ -353,7 +348,7 @@ def edit(
                     unpacked_dir, tmpl_slide, xml, rels, idx, photo_entry
                 )
 
-        # 4. Update footer
+        # 3. Update footer
         xml = set_footer_text(xml, footer)
 
         write_slide(unpacked_dir, tmpl_slide, xml)

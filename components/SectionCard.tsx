@@ -166,9 +166,6 @@ export default function SectionCard({
             // Middle card elevated, side cards sit slightly lower
             const offsetY = depth === 0 ? -8 : 4;
             const scale   = 1 - depth * 0.04;
-            const imgW    = previewFit === "contain" ? "auto" : "100%";
-            const imgH    = previewFit === "contain" ? "100%" : "190px";
-
             return (
               <div
                 key={src}
@@ -176,22 +173,25 @@ export default function SectionCard({
                 style={{
                   transform: `translateX(${offsetX}px) translateY(${offsetY}px) scale(${scale})`,
                   zIndex: total - depth,
-                  width:  previewFit === "contain" ? "110px" : "152px",
-                  height: "190px",
+                  width: previewFit === "contain" ? "110px" : "152px",
                   borderRadius: "6px",
                   overflow: "hidden",
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "center",
                   boxShadow: `0 ${4 + depth * 4}px ${16 + depth * 12}px rgba(0,0,0,${0.18 + depth * 0.08})`,
-                  background: previewFit === "contain" ? "rgba(0,0,0,0.04)" : "transparent",
                 }}
               >
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img
                   src={src}
                   alt=""
-                  style={{ width: imgW, height: imgH, objectFit: previewFit, display: "block" }}
+                  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                  fetchPriority={"high" as any}
+                  loading="eager"
+                  style={{
+                    width: "100%",
+                    height: "190px",
+                    objectFit: previewFit,
+                    display: "block",
+                  }}
                 />
               </div>
             );

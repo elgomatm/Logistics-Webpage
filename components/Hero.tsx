@@ -21,7 +21,7 @@ export default function WorkspaceHeader() {
               width:  "auto",
               filter:  "brightness(0)",
               opacity: 0.85,
-              transform: "translate(-4cm, -5px)",
+              transform: "translateY(-5px)",
             }}
             priority
           />

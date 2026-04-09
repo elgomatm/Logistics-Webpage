@@ -218,9 +218,7 @@ function Input({ value, onChange, placeholder, className = "" }: {
       value={value}
       onChange={e => onChange(e.target.value)}
       placeholder={placeholder}
-      className={`w-full bg-[rgba(255,255,255,0.05)] border border-[rgba(255,255,255,0.1)]
-        rounded px-3 py-2 text-sm text-white placeholder-[rgba(255,255,255,0.25)]
-        focus:outline-none focus:border-[rgba(201,169,110,0.6)] transition-colors ${className}`}
+      className={`input-field text-sm ${className}`}
     />
   );
 }
@@ -234,9 +232,7 @@ function Textarea({ value, onChange, placeholder, rows = 4 }: {
       onChange={e => onChange(e.target.value)}
       placeholder={placeholder}
       rows={rows}
-      className="w-full bg-[rgba(255,255,255,0.05)] border border-[rgba(255,255,255,0.1)]
-        rounded px-3 py-2 text-sm text-white placeholder-[rgba(255,255,255,0.25)]
-        focus:outline-none focus:border-[rgba(201,169,110,0.6)] transition-colors resize-y font-mono"
+      className="input-field text-sm resize-y font-mono"
     />
   );
 }
@@ -299,10 +295,10 @@ function FileDropZone({
           </>
         ) : (
           <>
-            <span className="text-[rgba(255,255,255,0.5)] text-sm">
-              Drop file here or <span className="text-[rgba(201,169,110,0.8)] underline">browse</span>
+            <span className="upload-zone-label">
+              Drop file here or <span className="text-[rgba(201,169,110,0.8)] underline cursor-pointer">browse</span>
             </span>
-            <span className="text-[10px] text-[rgba(255,255,255,0.25)]">{hint}</span>
+            <span className="upload-zone-hint">{hint}</span>
           </>
         )}
       </div>
@@ -324,8 +320,8 @@ function Step1({
     <div className="space-y-6">
       {/* ── File assets ── */}
       <div className="space-y-4">
-        <p className="text-[11px] text-[rgba(255,255,255,0.4)] leading-relaxed">
-          Upload the <strong className="text-white">previous event's report</strong> as your base template,
+        <p className="text-[11px] text-[var(--text-3)] leading-relaxed">
+          Upload the <strong style={{ color: "var(--text-1)" }}>previous event's report</strong> as your base template,
           then provide the new event's cover photo and title PNG. These are applied to the cover slide before
           all other content is replaced.
         </p>
@@ -356,7 +352,7 @@ function Step1({
         </div>
       </div>
 
-      <hr className="border-[rgba(255,255,255,0.07)]" />
+      <hr className="border-[var(--border)]" />
 
       {/* ── Event identity ── */}
       <div>
@@ -368,7 +364,7 @@ function Step1({
         <Label>Partner Name(s) — one per line for batch generation</Label>
         <Textarea rows={5} value={s.partners} onChange={v => set("partners", v)}
           placeholder={"COTA\nDouble R Ranch\nFrontline Heroes Outdoors"} />
-        <p className="text-[11px] text-[rgba(255,255,255,0.35)] mt-1">
+        <p className="text-[11px] text-[var(--text-3)] mt-1">
           Each line generates a separate tailored report. All share the same event data below.
         </p>
       </div>
@@ -381,7 +377,7 @@ function Step2({ s, set }: { s: WizardState; set: (k: keyof WizardState, v: unkn
     <div className="space-y-4">
       <div>
         <Label>Introduction Letter Body</Label>
-        <p className="text-[11px] text-[rgba(255,255,255,0.35)] mb-2">
+        <p className="text-[11px] text-[var(--text-3)] mb-2">
           Separate paragraphs with a blank line. The "TO THE [PARTNER] TEAM," salutation is auto-generated.
         </p>
         <Textarea rows={14} value={s.intro_body} onChange={v => set("intro_body", v)}
@@ -441,7 +437,7 @@ function Step4({ s, set }: { s: WizardState; set: (k: keyof WizardState, v: unkn
       </div>
       <div>
         <Label>Post Table — CSV (name, date, views, reach, likes, shares, comments, saves)</Label>
-        <p className="text-[11px] text-[rgba(255,255,255,0.35)] mb-2">
+        <p className="text-[11px] text-[var(--text-3)] mb-2">
           One post per line. No header row. Up to 98 posts (7 pages × 14 rows).
         </p>
         <Textarea rows={10} value={s.posts_csv} onChange={v => set("posts_csv", v)}
@@ -459,11 +455,11 @@ function Step5({ s, set }: { s: WizardState; set: (k: keyof WizardState, v: unkn
   };
   return (
     <div className="space-y-6">
-      <p className="text-[11px] text-[rgba(255,255,255,0.4)]">
+      <p className="text-[11px] text-[var(--text-3)]">
         5 frosted-glass bars top → bottom. Unused bars are hidden automatically.
       </p>
       {s.testimonials.map((t, i) => (
-        <div key={i} className="border border-[rgba(255,255,255,0.08)] rounded-lg p-4 space-y-3">
+        <div key={i} className="border border-[var(--border)] rounded-lg p-4 space-y-3 bg-[var(--surface)]">
           <p className="text-xs text-[rgba(201,169,110,0.8)] font-bebas tracking-widest">
             Bar {i + 1}
           </p>
@@ -685,7 +681,7 @@ function GalleryStep({
             className={`px-3 py-1 rounded text-[11px] tracking-wider uppercase transition-all ${
               i === activeTab
                 ? "bg-[rgba(201,169,110,0.2)] text-[rgba(201,169,110,0.9)] border border-[rgba(201,169,110,0.4)]"
-                : "text-[rgba(255,255,255,0.35)] hover:text-[rgba(255,255,255,0.7)] border border-transparent"
+                : "text-[rgba(0,0,0,0.35)] hover:text-[rgba(0,0,0,0.65)] border border-transparent"
             }`}
           >
             Slide {i + 1}
@@ -704,9 +700,9 @@ function GalleryStep({
         {slides.length > 1 && (
           <button
             onClick={() => removeSlide(activeTab)}
-            className="ml-auto px-2.5 py-1 rounded text-[10px] text-[rgba(255,80,80,0.5)]
-              border border-[rgba(255,80,80,0.15)] hover:border-[rgba(255,80,80,0.4)]
-              hover:text-[rgba(255,80,80,0.8)] transition-all"
+            className="ml-auto px-2.5 py-1 rounded text-[10px] text-red-400
+              border border-red-200 hover:border-red-400
+              hover:text-red-600 transition-all"
           >
             Remove Slide {activeTab + 1}
           </button>
@@ -721,13 +717,13 @@ function GalleryStep({
           onChange={v => updateSlide(activeTab, { title: v })}
           placeholder="e.g. The Starting Grid"
         />
-        <p className="text-[10px] text-[rgba(255,255,255,0.25)] mt-1">
+        <p className="text-[10px] text-[var(--text-3)] mt-1">
           Font will auto-shrink in the PPTX if text is too long for the title bar.
         </p>
       </div>
 
       {/* ── Slide preview with 6 photo slots ────────────────────────── */}
-      <div className="rounded-lg overflow-hidden border border-[rgba(255,255,255,0.08)]">
+      <div className="rounded-lg overflow-hidden border border-[var(--border-mid)]">
         {/* Preserve portrait 8.5×11 aspect ratio */}
         <div
           className="relative w-full bg-[#080808]"
@@ -783,7 +779,7 @@ function Step8({ s, set }: { s: WizardState; set: (k: keyof WizardState, v: unkn
     <div className="space-y-4">
       <div>
         <Label>Guest List — CSV (full_name, email, exotic_car)</Label>
-        <p className="text-[11px] text-[rgba(255,255,255,0.35)] mb-2">
+        <p className="text-[11px] text-[var(--text-3)] mb-2">
           No header row. Up to 105 guests (7 pages × 15 rows). Paste from spreadsheet.
         </p>
         <Textarea rows={14} value={s.guests_csv} onChange={v => set("guests_csv", v)}
@@ -1024,7 +1020,7 @@ export default function ReportWizard() {
   ];
 
   return (
-    <div className="min-h-screen" style={{ background: "#0a0a0a" }}>
+    <div className="min-h-screen" style={{ background: "var(--bg)" }}>
       {generating && (
         <ProgressOverlay
           partners={partners}
@@ -1057,7 +1053,7 @@ export default function ReportWizard() {
               className={`px-3 py-1 rounded text-[10px] tracking-wider uppercase transition-all ${
                 i === step
                   ? "bg-[rgba(201,169,110,0.2)] text-[rgba(201,169,110,0.9)] border border-[rgba(201,169,110,0.4)]"
-                  : "text-[rgba(255,255,255,0.3)] hover:text-[rgba(255,255,255,0.6)]"
+                  : "text-[rgba(0,0,0,0.35)] hover:text-[rgba(0,0,0,0.65)]"
               }`}
             >
               {i + 1}. {label}
@@ -1066,8 +1062,7 @@ export default function ReportWizard() {
         </div>
 
         {/* Step content */}
-        <div className="bg-[rgba(255,255,255,0.03)] border border-[rgba(255,255,255,0.07)]
-          rounded-2xl p-7 mb-6">
+        <div className="module-card rounded-2xl p-7 mb-6">
           <h2 className="font-bebas text-2xl tracking-widest text-[rgba(201,169,110,0.8)] mb-6">
             Step {step + 1} — {STEPS[step]}
           </h2>
@@ -1079,8 +1074,8 @@ export default function ReportWizard() {
           <button
             onClick={() => setStep(s => Math.max(0, s - 1))}
             disabled={step === 0}
-            className="px-5 py-2.5 rounded-lg text-sm border border-[rgba(255,255,255,0.1)]
-              text-[rgba(255,255,255,0.5)] hover:text-white hover:border-[rgba(255,255,255,0.3)]
+            className="px-5 py-2.5 rounded-lg text-sm border border-[var(--border-mid)]
+              text-[var(--text-3)] hover:text-[var(--text-1)] hover:border-[rgba(0,0,0,0.25)]
               transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
           >
             ← Back
@@ -1089,16 +1084,16 @@ export default function ReportWizard() {
           {step < STEPS.length - 1 ? (
             <button
               onClick={() => setStep(s => Math.min(STEPS.length - 1, s + 1))}
-              className="px-5 py-2.5 rounded-lg text-sm bg-[rgba(255,255,255,0.07)]
-                border border-[rgba(255,255,255,0.15)] text-white
-                hover:bg-[rgba(255,255,255,0.12)] transition-colors"
+              className="px-5 py-2.5 rounded-lg text-sm bg-[var(--text-1)]
+                border border-[var(--text-1)] text-white
+                hover:opacity-80 transition-opacity"
             >
               Next →
             </button>
           ) : (
             <div className="flex flex-col items-end gap-1">
               {!assets.template && (
-                <p className="text-[11px] text-[rgba(255,120,120,0.8)]">
+                <p className="text-[11px] text-red-500">
                   ← Upload the template PPTX on Step 1 to generate
                 </p>
               )}
@@ -1127,12 +1122,12 @@ export default function ReportWizard() {
 
         {/* Summary card */}
         {partners.length > 0 && (
-          <div className="mt-6 p-4 rounded-xl border border-[rgba(255,255,255,0.06)]
-            bg-[rgba(255,255,255,0.02)] text-xs text-[rgba(255,255,255,0.35)] space-y-1">
-            <p><span className="text-[rgba(255,255,255,0.5)]">Event:</span> {state.event_name || "—"}</p>
-            <p><span className="text-[rgba(255,255,255,0.5)]">Partners:</span> {partners.join(", ")}</p>
-            <p><span className="text-[rgba(255,255,255,0.5)]">Posts:</span> {state.posts_csv.split("\n").filter(Boolean).length}</p>
-            <p><span className="text-[rgba(255,255,255,0.5)]">Guests:</span> {state.guests_csv.split("\n").filter(Boolean).length}</p>
+          <div className="mt-6 p-4 rounded-xl border border-[var(--border)]
+            bg-[var(--surface)] text-xs text-[var(--text-3)] space-y-1">
+            <p><span className="font-medium text-[var(--text-2)]">Event:</span> {state.event_name || "—"}</p>
+            <p><span className="font-medium text-[var(--text-2)]">Partners:</span> {partners.join(", ")}</p>
+            <p><span className="font-medium text-[var(--text-2)]">Posts:</span> {state.posts_csv.split("\n").filter(Boolean).length}</p>
+            <p><span className="font-medium text-[var(--text-2)]">Guests:</span> {state.guests_csv.split("\n").filter(Boolean).length}</p>
           </div>
         )}
       </div>

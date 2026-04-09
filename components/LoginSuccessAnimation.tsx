@@ -9,11 +9,12 @@ import { useSession } from "next-auth/react";
  * GPU compositor handles every transition.
  */
 export default function LoginSuccessAnimation() {
-  const { data: session, status } = useSession();
+  const { data: session } = useSession();
   const [phase, setPhase] = useState<"hidden" | "show" | "exit">("hidden");
 
   useEffect(() => {
-    if (status !== "authenticated") return;
+    // Don't wait for session status — check sessionStorage immediately on mount.
+    // This fires as soon as the component hydrates, not after the auth round-trip.
     const key = "ten_login_welcomed";
     if (sessionStorage.getItem(key)) return;
     sessionStorage.setItem(key, "1");
@@ -29,7 +30,7 @@ export default function LoginSuccessAnimation() {
       clearTimeout(exitTimer);
       clearTimeout(hideTimer);
     };
-  }, [status]);
+  }, []);  // ← empty deps: run once on mount, no waiting for auth status
 
   if (phase === "hidden") return null;
 

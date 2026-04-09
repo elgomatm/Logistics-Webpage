@@ -8,8 +8,8 @@ export default function WorkspaceHeader() {
 
       {/* Title row — CSS fade-up, no Framer */}
       <div className="flex flex-col items-center text-center anim-fade-up" style={{ animationDelay: "0.1s" }}>
-        <div className="flex items-end justify-center" style={{ gap: "clamp(10px, 1.2vw, 17px)" }}>
-          {/* TEN logo — bottom-locked, height trimmed so top aligns with Bebas cap-height */}
+        <div className="flex items-center justify-center" style={{ gap: "clamp(10px, 1.2vw, 17px)" }}>
+          {/* TEN logo */}
           <Image
             src="/ten-logo.png"
             alt="TEN"
@@ -17,10 +17,11 @@ export default function WorkspaceHeader() {
             height={56}
             className="object-contain select-none shrink-0"
             style={{
-              height: "clamp(34px, 3.9vw, 57px)",
+              height: "clamp(38px, 4.38vw, 64px)",
               width:  "auto",
               filter:  "brightness(0)",
               opacity: 0.85,
+              transform: "translateY(-6px)",
             }}
             priority
           />

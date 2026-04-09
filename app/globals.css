@@ -313,3 +313,99 @@ body {
 .anim-fade-in {
   animation: fade-in 0.5s ease both;
 }
+
+/* ─── Welcome animation keyframes (GPU only — no JS per frame) ── */
+@keyframes w-overlay {
+  0%   { opacity: 0.6; }
+  100% { opacity: 0; }
+}
+@keyframes w-ring-a {
+  0%   { transform: scale(0);   opacity: 0.55; }
+  100% { transform: scale(3.5); opacity: 0; }
+}
+@keyframes w-ring-b {
+  0%   { transform: scale(0); opacity: 0.3; }
+  100% { transform: scale(5);  opacity: 0; }
+}
+@keyframes w-logo {
+  0%   { opacity: 0; transform: translateY(8px) scale(0.88); }
+  100% { opacity: 1; transform: translateY(0)   scale(1); }
+}
+@keyframes w-text {
+  0%   { opacity: 0; transform: translateY(8px); }
+  100% { opacity: 1; transform: translateY(0); }
+}
+@keyframes w-rule {
+  0%   { transform: scaleX(0); opacity: 0; }
+  100% { transform: scaleX(1); opacity: 1; }
+}
+@keyframes w-out {
+  0%   { opacity: 1; }
+  100% { opacity: 0; }
+}
+
+/* ─── Welcome wrapper ───────────────────────────────────────── */
+.ten-welcome {
+  position: fixed; inset: 0; z-index: 999;
+  display: flex; align-items: center; justify-content: center;
+  pointer-events: none;
+}
+.ten-welcome.exiting {
+  animation: w-out 0.55s cubic-bezier(0.4, 0, 1, 1) forwards;
+}
+
+/* overlay */
+.ten-welcome__overlay {
+  position: absolute; inset: 0;
+  background: #090909;
+  animation: w-overlay 2.0s 0.7s ease-out forwards;
+  will-change: opacity;
+}
+
+/* rings */
+.ten-welcome__ring {
+  position: absolute;
+  width: 120px; height: 120px;
+  border-radius: 50%;
+  will-change: transform, opacity;
+}
+.ten-welcome__ring--a {
+  border: 1px solid rgba(201,169,110,0.5);
+  animation: w-ring-a 1.4s 0.1s cubic-bezier(0.16,1,0.3,1) forwards;
+}
+.ten-welcome__ring--b {
+  border: 1px solid rgba(201,169,110,0.25);
+  animation: w-ring-b 1.8s 0.2s cubic-bezier(0.16,1,0.3,1) forwards;
+}
+
+/* content */
+.ten-welcome__content {
+  position: relative;
+  display: flex; flex-direction: column;
+  align-items: center; gap: 20px;
+  text-align: center;
+}
+.ten-welcome__logo {
+  font-family: var(--font-bebas);
+  letter-spacing: 0.3em;
+  font-size: 64px;
+  line-height: 1;
+  color: rgba(201,169,110,0.95);
+  animation: w-logo 0.65s 0.15s cubic-bezier(0.16,1,0.3,1) both;
+  will-change: transform, opacity;
+}
+.ten-welcome__text {
+  font-size: 11px;
+  letter-spacing: 0.35em;
+  text-transform: uppercase;
+  color: rgba(255,255,255,0.82);
+  animation: w-text 0.5s 0.45s ease-out both;
+  will-change: transform, opacity;
+}
+.ten-welcome__rule {
+  height: 1px; width: 80px;
+  background: rgba(201,169,110,0.4);
+  transform-origin: center;
+  animation: w-rule 0.55s 0.6s cubic-bezier(0.16,1,0.3,1) both;
+  will-change: transform, opacity;
+}

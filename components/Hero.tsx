@@ -8,7 +8,7 @@ export default function WorkspaceHeader() {
 
       {/* Title row — CSS fade-up, no Framer */}
       <div className="flex flex-col items-center text-center anim-fade-up" style={{ animationDelay: "0.1s" }}>
-        <div className="flex items-center justify-center" style={{ gap: "clamp(21.5px, 2.4vw, 35.5px)" }}>
+        <div className="flex items-center justify-center" style={{ gap: "clamp(22px, 2.4vw, 36px)" }}>
           {/* TEN logo */}
           <Image
             src="/ten-logo.png"

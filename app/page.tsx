@@ -85,6 +85,7 @@ export default function Home() {
               description="Build comprehensive partner guides and venue handbooks with ease. Standardize layouts, auto-fill venue details, and produce print-ready documents that represent TEN at the highest level."
               tags={["Venue Guides", "Partner Handbooks", "Templates", "Brand-Consistent"]}
               status="planned" statusLabel="Planned" ctaLabel="Coming Soon"
+              previewFit="contain"
               previewImages={[
                 "/guide-covers/cover-1.jpg",
                 "/guide-covers/cover-2.png",

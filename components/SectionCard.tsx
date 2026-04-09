@@ -22,13 +22,14 @@ interface ModuleCardProps {
   index: number;
   stat?: StatBlock;
   previewImages?: string[];
+  previewFit?: "cover" | "contain";
 }
 
 export default function SectionCard({
   id, number, title, subtitle, description,
   tags, status, statusLabel,
   ctaLabel = "Open Module", href, onCta,
-  index, stat, previewImages,
+  index, stat, previewImages, previewFit = "cover",
 }: ModuleCardProps) {
   const isActive = status === "active";
   const cardRef  = useRef<HTMLDivElement>(null);
@@ -158,12 +159,15 @@ export default function SectionCard({
           }}
         >
           {previewImages.map((src, i) => {
-            const total = previewImages.length;
-            const mid   = (total - 1) / 2;
-            const depth = Math.abs(i - mid);
-            const offsetX     = (i - mid) * 76;
-            const offsetY     = depth * 6;
-            const scale       = 1 - depth * 0.04;
+            const total   = previewImages.length;
+            const mid     = (total - 1) / 2;
+            const depth   = Math.abs(i - mid);
+            const offsetX = (i - mid) * 76;
+            // Middle card elevated, side cards sit slightly lower
+            const offsetY = depth === 0 ? -8 : 4;
+            const scale   = 1 - depth * 0.04;
+            const imgW    = previewFit === "contain" ? "auto" : "100%";
+            const imgH    = previewFit === "contain" ? "100%" : "190px";
 
             return (
               <div
@@ -172,17 +176,22 @@ export default function SectionCard({
                 style={{
                   transform: `translateX(${offsetX}px) translateY(${offsetY}px) scale(${scale})`,
                   zIndex: total - depth,
-                  width: "152px",
+                  width:  previewFit === "contain" ? "110px" : "152px",
+                  height: "190px",
                   borderRadius: "6px",
                   overflow: "hidden",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
                   boxShadow: `0 ${4 + depth * 4}px ${16 + depth * 12}px rgba(0,0,0,${0.18 + depth * 0.08})`,
+                  background: previewFit === "contain" ? "rgba(0,0,0,0.04)" : "transparent",
                 }}
               >
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img
                   src={src}
                   alt=""
-                  style={{ width: "100%", height: "190px", objectFit: "cover", display: "block" }}
+                  style={{ width: imgW, height: imgH, objectFit: previewFit, display: "block" }}
                 />
               </div>
             );

@@ -1,1 +1,10 @@
-{}
+{
+  "functions": {
+    "app/api/upload-assets/route.ts": {
+      "maxDuration": 60
+    },
+    "app/api/batch-generate/route.ts": {
+      "maxDuration": 300
+    }
+  }
+}

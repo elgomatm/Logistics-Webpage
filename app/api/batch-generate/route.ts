@@ -30,6 +30,7 @@ const DEFAULT_TEMPLATE_PATH = path.join(process.cwd(), "template", "report_templ
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
+export const maxDuration = 300; // 5 minutes — report generation can take a while
 
 // ── helpers ──────────────────────────────────────────────────────────────────
 

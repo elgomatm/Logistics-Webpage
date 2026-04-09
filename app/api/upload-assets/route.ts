@@ -20,9 +20,11 @@ import { randomBytes } from "crypto";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
-
-// Next.js 14 — disable body parser so we can read FormData
 export const dynamic = "force-dynamic";
+
+// Raise body size limit — PPTX + photos can easily exceed the 4.5 MB default
+export const fetchCache = "force-no-store";
+
 
 export async function POST(req: NextRequest) {
   try {

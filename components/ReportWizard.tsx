@@ -942,8 +942,11 @@ export default function ReportWizard() {
 
       const upRes = await fetch("/api/upload-assets", { method: "POST", body: form });
       if (!upRes.ok) {
-        const err = await upRes.json().catch(() => ({ error: "Upload failed" }));
-        throw new Error(err.error ?? "Upload failed");
+        const text = await upRes.text().catch(() => "");
+        let errMsg = `Upload failed (HTTP ${upRes.status})`;
+        try { const j = JSON.parse(text); errMsg = j.error ?? errMsg; } catch { /* use status msg */ }
+        if (upRes.status === 413) errMsg = "Files too large — PPTX or photos exceed the 4.5 MB server limit. Try a smaller template or fewer/smaller photos.";
+        throw new Error(errMsg);
       }
       assetPaths = await upRes.json();
       setUploadStatus("done");

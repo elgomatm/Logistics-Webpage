@@ -21,7 +21,7 @@ from pathlib import Path
 
 from .manifest import ReportManifest, manifest_from_dict
 from .pptx_io import unpack, pack, clean_deleted_slides
-from .slides import intro, overview, digital, testimonials, gallery, content, guests
+from .slides import cover, intro, overview, digital, testimonials, gallery, content, guests
 
 
 def _delete_slides_from_presentation(
@@ -73,15 +73,19 @@ def generate(
     template_path: str,
     output_path: str,
     progress_callback=None,
+    cover_photo_path: str | None = None,
+    title_png_path: str | None = None,
 ) -> str:
     """
     Generate a partner report PPTX.
 
     Args:
         manifest:          Populated ReportManifest.
-        template_path:     Path to report_template.pptx.
+        template_path:     Path to the previous event PPTX used as base template.
         output_path:       Where to write the generated PPTX.
         progress_callback: Optional callable(step: str, pct: int).
+        cover_photo_path:  Optional path to new cover background photo.
+        title_png_path:    Optional path to event title PNG overlay.
 
     Returns:
         Absolute path to the generated PPTX.
@@ -102,7 +106,12 @@ def generate(
         _progress("Unpacking template…", 5)
         unpack(template_path, unpacked)
 
-        # ── 3. Edit slides ───────────────────────────────────────────────
+        # ── 3. Cover slide ───────────────────────────────────────────────
+        if cover_photo_path or title_png_path:
+            _progress("Building cover slide…", 10)
+            cover.edit(unpacked, cover_photo_path, title_png_path)
+
+        # ── 4. Edit content slides ───────────────────────────────────────
         _progress("Writing introduction…", 15)
         intro.edit(unpacked, manifest)
 
@@ -140,7 +149,13 @@ def generate(
         shutil.rmtree(work_dir, ignore_errors=True)
 
 
-def generate_from_json(json_path: str, template_path: str, output_path: str) -> str:
+def generate_from_json(
+    json_path: str,
+    template_path: str,
+    output_path: str,
+    cover_photo_path: str | None = None,
+    title_png_path: str | None = None,
+) -> str:
     with open(json_path, "r", encoding="utf-8") as f:
         data = json.load(f)
     m = manifest_from_dict(data)
@@ -153,17 +168,29 @@ def generate_from_json(json_path: str, template_path: str, output_path: str) -> 
     if not output_path:
         output_path = os.path.join(os.path.dirname(json_path), m.output_filename)
 
-    return generate(m, template_path, output_path)
+    return generate(
+        m, template_path, output_path,
+        cover_photo_path=cover_photo_path,
+        title_png_path=title_png_path,
+    )
 
 
 # ── CLI entry point ───────────────────────────────────────────────────────
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Generate a TEN partner report PPTX")
-    parser.add_argument("--manifest", required=True, help="Path to manifest JSON")
-    parser.add_argument("--template", required=True, help="Path to report_template.pptx")
-    parser.add_argument("--output",   default="",   help="Output .pptx path")
+    parser.add_argument("--manifest",     required=True, help="Path to manifest JSON")
+    parser.add_argument("--template",     required=True, help="Path to previous event PPTX (template)")
+    parser.add_argument("--output",       default="",    help="Output .pptx path")
+    parser.add_argument("--cover-photo",  default="",    help="Path to new cover background photo")
+    parser.add_argument("--title-png",    default="",    help="Path to event title PNG overlay")
     args = parser.parse_args()
 
-    out = generate_from_json(args.manifest, args.template, args.output)
+    out = generate_from_json(
+        args.manifest,
+        args.template,
+        args.output,
+        cover_photo_path=args.cover_photo or None,
+        title_png_path=args.title_png or None,
+    )
     print(f"OUTPUT:{out}", flush=True)

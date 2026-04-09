@@ -25,7 +25,8 @@ import os from "os";
 import { createWriteStream } from "fs";
 import archiver from "archiver";
 
-const TEMPLATE_PATH = path.join(process.cwd(), "template", "report_template.pptx");
+// Fallback template only used if no template_path is supplied in the request
+const DEFAULT_TEMPLATE_PATH = path.join(process.cwd(), "template", "report_template.pptx");
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -40,19 +41,24 @@ function runGenerator(
   manifest: object,
   outputPath: string,
   onProgress: (step: string, pct: number) => void,
+  templatePath: string,
+  coverPhotoPath?: string | null,
+  titlePngPath?: string | null,
 ): Promise<void> {
   return new Promise((resolve, reject) => {
     const tmpManifest = path.join(os.tmpdir(), `ten_m_${Date.now()}_${Math.random().toString(36).slice(2)}.json`);
     fs.writeFileSync(tmpManifest, JSON.stringify(manifest, null, 2));
 
-    const py = spawn(
-      "python3",
-      ["-m", "scripts.generate_report.generator",
-       "--manifest", tmpManifest,
-       "--template", TEMPLATE_PATH,
-       "--output",   outputPath],
-      { cwd: process.cwd() },
-    );
+    const args = [
+      "-m", "scripts.generate_report.generator",
+      "--manifest", tmpManifest,
+      "--template",  templatePath,
+      "--output",    outputPath,
+    ];
+    if (coverPhotoPath) args.push("--cover-photo", coverPhotoPath);
+    if (titlePngPath)   args.push("--title-png",   titlePngPath);
+
+    const py = spawn("python3", args, { cwd: process.cwd() });
 
     py.stdout.on("data", (chunk: Buffer) => {
       for (const line of chunk.toString().split("\n")) {
@@ -95,10 +101,17 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Missing event_base or partners[]" }, { status: 400 });
   }
 
-  const { event_base, partners } = body as {
-    event_base: Record<string, unknown>;
-    partners: { name: string; overrides?: Record<string, unknown> }[];
+  const { event_base, partners, template_path, cover_path, title_png_path } = body as {
+    event_base:      Record<string, unknown>;
+    partners:        { name: string; overrides?: Record<string, unknown> }[];
+    template_path?:  string;
+    cover_path?:     string | null;
+    title_png_path?: string | null;
   };
+
+  const resolvedTemplate = template_path && fs.existsSync(template_path)
+    ? template_path
+    : DEFAULT_TEMPLATE_PATH;
 
   const encoder = new TextEncoder();
 
@@ -141,11 +154,17 @@ export async function POST(req: NextRequest) {
             const filename    = `${safeEvent} - Report for ${safePartner}.pptx`;
             const outputPath  = path.join(outDir, filename);
 
-            await runGenerator(manifest, outputPath, (step, pct) => {
-              progress[name] = pct;
-              send({ partner: name, pct, step });
-              send({ overall: calcOverall() });
-            });
+            await runGenerator(
+              manifest, outputPath,
+              (step, pct) => {
+                progress[name] = pct;
+                send({ partner: name, pct, step });
+                send({ overall: calcOverall() });
+              },
+              resolvedTemplate,
+              cover_path,
+              title_png_path,
+            );
 
             generatedFiles.push({ path: outputPath, name: filename });
           })

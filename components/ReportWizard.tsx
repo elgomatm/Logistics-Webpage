@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef } from "react";
+import { useState, useRef, useCallback } from "react";
 import { useRouter } from "next/navigation";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -154,6 +154,21 @@ function buildManifest(s: WizardState, partnerName: string): object {
   };
 }
 
+// ── Asset types ───────────────────────────────────────────────────────────────
+
+interface AssetFiles {
+  template:  File | null;   // previous event PPTX
+  cover:     File | null;   // new cover background photo
+  title_png: File | null;   // event title PNG overlay
+}
+
+interface AssetPaths {
+  template:  string;
+  cover:     string;
+  title_png: string;
+  session_id: string;
+}
+
 // ── Sub-components ────────────────────────────────────────────────────────────
 
 function Label({ children }: { children: React.ReactNode }) {
@@ -195,11 +210,124 @@ function Textarea({ value, onChange, placeholder, rows = 4 }: {
   );
 }
 
+function FileDropZone({
+  label,
+  accept,
+  hint,
+  file,
+  onFile,
+}: {
+  label: string;
+  accept: string;
+  hint: string;
+  file: File | null;
+  onFile: (f: File) => void;
+}) {
+  const inputRef = useRef<HTMLInputElement>(null);
+  const [dragging, setDragging] = useState(false);
+
+  const handleDrop = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    setDragging(false);
+    const f = e.dataTransfer.files[0];
+    if (f) onFile(f);
+  }, [onFile]);
+
+  return (
+    <div>
+      <Label>{label}</Label>
+      <div
+        onClick={() => inputRef.current?.click()}
+        onDragOver={e => { e.preventDefault(); setDragging(true); }}
+        onDragLeave={() => setDragging(false)}
+        onDrop={handleDrop}
+        className={`relative flex flex-col items-center justify-center gap-2 rounded-lg border-2 border-dashed
+          px-4 py-5 cursor-pointer transition-colors
+          ${dragging
+            ? "border-[rgba(201,169,110,0.7)] bg-[rgba(201,169,110,0.08)]"
+            : file
+              ? "border-[rgba(201,169,110,0.4)] bg-[rgba(201,169,110,0.05)]"
+              : "border-[rgba(255,255,255,0.12)] bg-[rgba(255,255,255,0.02)] hover:border-[rgba(255,255,255,0.25)]"
+          }`}
+      >
+        <input
+          ref={inputRef}
+          type="file"
+          accept={accept}
+          className="hidden"
+          onChange={e => { const f = e.target.files?.[0]; if (f) onFile(f); }}
+        />
+        {file ? (
+          <>
+            <span className="text-[rgba(201,169,110,0.9)] text-sm font-medium truncate max-w-full px-2">
+              ✓ {file.name}
+            </span>
+            <span className="text-[10px] text-[rgba(255,255,255,0.3)]">
+              {(file.size / 1024 / 1024).toFixed(1)} MB — click to replace
+            </span>
+          </>
+        ) : (
+          <>
+            <span className="text-[rgba(255,255,255,0.5)] text-sm">
+              Drop file here or <span className="text-[rgba(201,169,110,0.8)] underline">browse</span>
+            </span>
+            <span className="text-[10px] text-[rgba(255,255,255,0.25)]">{hint}</span>
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
 // ── Step panels ───────────────────────────────────────────────────────────────
 
-function Step1({ s, set }: { s: WizardState; set: (k: keyof WizardState, v: unknown) => void }) {
+function Step1({
+  s, set, assets, setAsset,
+}: {
+  s: WizardState;
+  set: (k: keyof WizardState, v: unknown) => void;
+  assets: AssetFiles;
+  setAsset: (k: keyof AssetFiles, f: File) => void;
+}) {
   return (
-    <div className="space-y-5">
+    <div className="space-y-6">
+      {/* ── File assets ── */}
+      <div className="space-y-4">
+        <p className="text-[11px] text-[rgba(255,255,255,0.4)] leading-relaxed">
+          Upload the <strong className="text-white">previous event's report</strong> as your base template,
+          then provide the new event's cover photo and title PNG. These are applied to the cover slide before
+          all other content is replaced.
+        </p>
+
+        <FileDropZone
+          label="Previous Event Report (PPTX) *"
+          accept=".pptx"
+          hint="The last completed TEN event report — used as the structural base"
+          file={assets.template}
+          onFile={f => setAsset("template", f)}
+        />
+
+        <div className="grid grid-cols-2 gap-4">
+          <FileDropZone
+            label="Cover Photo"
+            accept="image/jpeg,image/png,.jpg,.jpeg,.png"
+            hint="Full-bleed background for slide 1"
+            file={assets.cover}
+            onFile={f => setAsset("cover", f)}
+          />
+          <FileDropZone
+            label="Event Title PNG"
+            accept=".png"
+            hint="Transparent PNG — styled event name overlay"
+            file={assets.title_png}
+            onFile={f => setAsset("title_png", f)}
+          />
+        </div>
+      </div>
+
+      <hr className="border-[rgba(255,255,255,0.07)]" />
+
+      {/* ── Event identity ── */}
       <div>
         <Label>Event Name</Label>
         <Input value={s.event_name} onChange={v => set("event_name", v)}
@@ -207,10 +335,10 @@ function Step1({ s, set }: { s: WizardState; set: (k: keyof WizardState, v: unkn
       </div>
       <div>
         <Label>Partner Name(s) — one per line for batch generation</Label>
-        <Textarea rows={6} value={s.partners} onChange={v => set("partners", v)}
+        <Textarea rows={5} value={s.partners} onChange={v => set("partners", v)}
           placeholder={"COTA\nDouble R Ranch\nFrontline Heroes Outdoors"} />
         <p className="text-[11px] text-[rgba(255,255,255,0.35)] mt-1">
-          Each line generates a separate report. All share the same event data below.
+          Each line generates a separate tailored report. All share the same event data below.
         </p>
       </div>
     </div>
@@ -490,6 +618,14 @@ function ProgressOverlay({
 export default function ReportWizard() {
   const [step, setStep]   = useState(0);
   const [state, setState] = useState<WizardState>(INITIAL);
+
+  // ── Asset files (held in component state — uploaded just before generation)
+  const [assets, setAssets] = useState<AssetFiles>({
+    template: null, cover: null, title_png: null,
+  });
+  const [uploadStatus, setUploadStatus] = useState<"idle" | "uploading" | "done" | "error">("idle");
+  const [uploadError, setUploadError]   = useState("");
+
   const [generating, setGenerating] = useState(false);
   const [partnerProgress, setPartnerProgress] = useState<Record<string, { pct: number; step: string }>>({});
   const [overall, setOverall]         = useState(0);
@@ -500,12 +636,15 @@ export default function ReportWizard() {
   const set = (k: keyof WizardState, v: unknown) =>
     setState(prev => ({ ...prev, [k]: v }));
 
+  const setAsset = (k: keyof AssetFiles, f: File) =>
+    setAssets(prev => ({ ...prev, [k]: f }));
+
   const partners = state.partners
     .split("\n")
     .map(l => l.trim())
     .filter(Boolean);
 
-  const canGenerate = state.event_name.trim() && partners.length > 0;
+  const canGenerate = state.event_name.trim() && partners.length > 0 && !!assets.template;
 
   async function generate() {
     if (!canGenerate) return;
@@ -514,15 +653,46 @@ export default function ReportWizard() {
     setDownloadUrl("");
     setGenError("");
     setOverall(0);
+    setUploadError("");
+
+    // ── Step A: Upload asset files ──────────────────────────────────────────
+    let assetPaths: Partial<AssetPaths> = {};
+    setUploadStatus("uploading");
+
+    try {
+      const form = new FormData();
+      form.append("template",  assets.template!);
+      if (assets.cover)     form.append("cover",     assets.cover);
+      if (assets.title_png) form.append("title_png", assets.title_png);
+
+      const upRes = await fetch("/api/upload-assets", { method: "POST", body: form });
+      if (!upRes.ok) {
+        const err = await upRes.json().catch(() => ({ error: "Upload failed" }));
+        throw new Error(err.error ?? "Upload failed");
+      }
+      assetPaths = await upRes.json();
+      setUploadStatus("done");
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : String(e);
+      setUploadError(msg);
+      setUploadStatus("error");
+      setGenerating(false);
+      return;
+    }
+
+    // ── Step B: Kick off batch generation ───────────────────────────────────
     const init: Record<string, { pct: number; step: string }> = {};
     partners.forEach(p => { init[p] = { pct: 0, step: "Queued…" }; });
     setPartnerProgress(init);
 
     const body = {
-      event_base: buildManifest(state, "__placeholder__"),
-      partners:   partners.map(name => ({ name })),
+      event_base:    buildManifest(state, "__placeholder__"),
+      partners:      partners.map(name => ({ name })),
+      template_path: assetPaths.template,
+      cover_path:    assetPaths.cover    ?? null,
+      title_png_path: assetPaths.title_png ?? null,
     };
-    // Remove partner_name from event_base (it's set per-partner)
+    // Remove partner_name from event_base (it's set per-partner by the API)
     delete (body.event_base as Record<string, unknown>).partner_name;
 
     const res = await fetch("/api/batch-generate", {
@@ -560,7 +730,7 @@ export default function ReportWizard() {
   }
 
   const stepComponents = [
-    <Step1 key={0} s={state} set={set} />,
+    <Step1 key={0} s={state} set={set} assets={assets} setAsset={setAsset} />,
     <Step2 key={1} s={state} set={set} />,
     <Step3 key={2} s={state} set={set} />,
     <Step4 key={3} s={state} set={set} />,
@@ -643,16 +813,32 @@ export default function ReportWizard() {
               Next →
             </button>
           ) : (
-            <button
-              onClick={generate}
-              disabled={!canGenerate}
-              className="px-8 py-2.5 rounded-lg text-sm font-medium transition-colors
-                bg-[rgba(201,169,110,0.15)] border border-[rgba(201,169,110,0.5)]
-                text-[rgba(201,169,110,0.9)] hover:bg-[rgba(201,169,110,0.25)]
-                disabled:opacity-30 disabled:cursor-not-allowed"
-            >
-              Generate {partners.length > 1 ? `${partners.length} Reports` : "Report"} →
-            </button>
+            <div className="flex flex-col items-end gap-1">
+              {!assets.template && (
+                <p className="text-[11px] text-[rgba(255,120,120,0.8)]">
+                  ← Upload the template PPTX on Step 1 to generate
+                </p>
+              )}
+              {uploadStatus === "uploading" && (
+                <p className="text-[11px] text-[rgba(201,169,110,0.7)]">Uploading assets…</p>
+              )}
+              {uploadError && (
+                <p className="text-[11px] text-red-400">{uploadError}</p>
+              )}
+              <button
+                onClick={generate}
+                disabled={!canGenerate || generating}
+                className="px-8 py-2.5 rounded-lg text-sm font-medium transition-colors
+                  bg-[rgba(201,169,110,0.15)] border border-[rgba(201,169,110,0.5)]
+                  text-[rgba(201,169,110,0.9)] hover:bg-[rgba(201,169,110,0.25)]
+                  disabled:opacity-30 disabled:cursor-not-allowed"
+              >
+                {generating
+                  ? uploadStatus === "uploading" ? "Uploading…" : "Generating…"
+                  : `Generate ${partners.length > 1 ? `${partners.length} Reports` : "Report"} →`
+                }
+              </button>
+            </div>
           )}
         </div>
 

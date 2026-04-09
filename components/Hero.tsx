@@ -17,11 +17,11 @@ export default function WorkspaceHeader() {
             height={56}
             className="object-contain select-none shrink-0"
             style={{
-              height: "clamp(38px, 4.38vw, 64px)",
+              height: "clamp(32px, 3.97vw, 58px)",
               width:  "auto",
               filter:  "brightness(0)",
               opacity: 0.85,
-              transform: "translateY(-6px)",
+              transform: "translateY(-3px)",
             }}
             priority
           />

@@ -8,8 +8,8 @@ export default function WorkspaceHeader() {
 
       {/* Title row — CSS fade-up, no Framer */}
       <div className="flex flex-col items-center text-center anim-fade-up" style={{ animationDelay: "0.1s" }}>
-        <div className="flex items-center justify-center" style={{ gap: "clamp(10px, 1.2vw, 17px)" }}>
-          {/* TEN logo — sized to match the cap-height of the title text */}
+        <div className="flex items-end justify-center" style={{ gap: "clamp(10px, 1.2vw, 17px)" }}>
+          {/* TEN logo — aligned to text baseline, nudged up to optically match cap-height */}
           <Image
             src="/ten-logo.png"
             alt="TEN"
@@ -21,6 +21,7 @@ export default function WorkspaceHeader() {
               width:  "auto",
               filter:  "brightness(0)",
               opacity: 0.85,
+              marginBottom: "clamp(2px, 0.3vw, 4px)",
             }}
             priority
           />

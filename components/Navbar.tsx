@@ -59,7 +59,7 @@ export default function Navbar() {
   return (
     <>
       <nav className={`fixed top-0 left-0 right-0 z-50 glass-nav anim-fade-in`}>
-        <div className="max-w-[1360px] mx-auto px-6 md:px-14 h-16 flex items-center justify-between">
+        <div className="relative max-w-[1360px] mx-auto px-6 md:px-14 h-16 flex items-center justify-between">
 
           {/* Left — wordmark, navigates home */}
           <button
@@ -72,21 +72,21 @@ export default function Navbar() {
             >
               TEN
             </span>
-            <div className="flex flex-col items-start justify-center hidden sm:flex" style={{ gap: "1px" }}>
-              <span
-                className="text-[7px] tracking-[0.28em] uppercase font-medium leading-none"
-                style={{ color: "var(--text-3)" }}
-              >
-                The Exotics Network
-              </span>
-              <span
-                className="text-[11px] tracking-[0.18em] uppercase font-semibold leading-none"
-                style={{ color: "var(--text-1)" }}
-              >
-                Document Studio
-              </span>
-            </div>
+            <span
+              className="text-[11px] tracking-[0.18em] uppercase font-semibold leading-none hidden sm:block"
+              style={{ color: "var(--text-1)" }}
+            >
+              Document Studio
+            </span>
           </button>
+
+          {/* Center — The Exotics Network */}
+          <span
+            className="absolute left-1/2 -translate-x-1/2 text-[9px] tracking-[0.28em] uppercase font-medium hidden md:block pointer-events-none select-none"
+            style={{ color: "var(--text-3)" }}
+          >
+            The Exotics Network
+          </span>
 
           {/* Desktop nav */}
           <div className="hidden md:flex items-center gap-7">

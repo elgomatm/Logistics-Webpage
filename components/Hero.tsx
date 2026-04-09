@@ -17,7 +17,7 @@ export default function WorkspaceHeader() {
             height={56}
             className="object-contain select-none shrink-0"
             style={{
-              height: "clamp(30px, 3.4vw, 52px)",
+              height: "clamp(38px, 4.38vw, 64px)",
               width:  "auto",
               filter:  "brightness(0)",
               opacity: 0.85,

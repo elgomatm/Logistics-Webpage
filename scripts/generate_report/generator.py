@@ -126,7 +126,7 @@ def generate(
         testimonials.edit(unpacked, manifest)
 
         _progress("Injecting gallery photos…", 55)
-        gallery.edit(unpacked, manifest)
+        _kept_gallery, _del_gallery = gallery.edit(unpacked, manifest)
 
         _progress("Writing content creation slide…", 65)
         content.edit(unpacked, manifest)
@@ -136,7 +136,9 @@ def generate(
 
         # ── 4. Remove unused slides from presentation + disk ─────────────
         _progress("Removing unused slides…", 80)
-        _delete_slides_from_presentation(unpacked, _del_digital + _del_guests)
+        _delete_slides_from_presentation(
+            unpacked, _del_digital + _del_gallery + _del_guests
+        )
 
         # ── 5. Pack ──────────────────────────────────────────────────────
         _progress("Packing PPTX…", 90)

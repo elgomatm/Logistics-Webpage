@@ -34,22 +34,19 @@ export async function POST(req: NextRequest) {
 
     const result: Record<string, string> = { session_id: sessionId };
 
-    const fields: Array<{ key: string; ext: string }> = [
+    // ── Fixed asset fields ─────────────────────────────────────────────────
+    const fixedFields: Array<{ key: string; ext: string }> = [
       { key: "template",  ext: ".pptx" },
-      { key: "cover",     ext: ""       },   // keep original extension
+      { key: "cover",     ext: ""       },
       { key: "title_png", ext: ".png"  },
     ];
 
-    for (const { key, ext } of fields) {
+    for (const { key, ext } of fixedFields) {
       const file = form.get(key);
       if (!file || !(file instanceof File)) continue;
-
-      const originalName = file.name;
-      const fileExt = ext || originalName.slice(originalName.lastIndexOf(".")) || "";
+      const fileExt = ext || file.name.slice(file.name.lastIndexOf(".")) || "";
       const dest = join(dir, `${key}${fileExt}`);
-
-      const bytes = await file.arrayBuffer();
-      await writeFile(dest, Buffer.from(bytes));
+      await writeFile(dest, Buffer.from(await file.arrayBuffer()));
       result[key] = dest;
     }
 
@@ -61,7 +58,17 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    return NextResponse.json(result);
+    // ── Gallery photos: field names gallery_N_M (slideIndex_slotIndex) ────
+    const galleryPaths: Record<string, string> = {};
+    for (const [fieldName, value] of form.entries()) {
+      if (!fieldName.startsWith("gallery_") || !(value instanceof File)) continue;
+      const fileExt = value.name.slice(value.name.lastIndexOf(".")) || ".jpg";
+      const dest = join(dir, `${fieldName}${fileExt}`);
+      await writeFile(dest, Buffer.from(await value.arrayBuffer()));
+      galleryPaths[fieldName] = dest;
+    }
+
+    return NextResponse.json({ ...result, gallery_photos: galleryPaths });
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : String(err);
     return NextResponse.json({ error: message }, { status: 500 });

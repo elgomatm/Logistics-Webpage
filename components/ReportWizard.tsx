@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef, useCallback } from "react";
+import { useState, useRef, useCallback, useEffect } from "react";
 import { useRouter } from "next/navigation";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -10,8 +10,33 @@ interface MetaPost {
   likes: string; shares: string; comments: string; saves: string;
 }
 interface Testimonial { quote: string; attribution: string; }
-interface GallerySection { title: string; photos: string[]; }
 interface GuestRow { full_name: string; email: string; exotic_car: string; }
+
+// ── Gallery types ─────────────────────────────────────────────────────────────
+interface PhotoCrop {
+  file: File;
+  url:  string;   // object URL for preview
+  posX: number;   // 0–100 focal point X
+  posY: number;   // 0–100 focal point Y
+}
+interface GallerySlide {
+  title:  string;
+  photos: (PhotoCrop | null)[];  // always 6 elements
+}
+const makeEmptySlide = (): GallerySlide => ({
+  title: "", photos: Array(6).fill(null) as null[],
+});
+
+// Slot layout from slideLayout3.xml (% of slide dims, portrait 8.5×11)
+// Order: L1 L2 L3 R1 R2 R3
+const PHOTO_SLOTS = [
+  { l: 6.793,  t: 17.045, w: 42.824, h: 18.091 },
+  { l: 6.793,  t: 35.510, w: 42.824, h: 18.091 },
+  { l: 6.793,  t: 53.975, w: 42.824, h: 18.091 },
+  { l: 50.196, t: 17.045, w: 42.941, h: 24.182 },
+  { l: 50.196, t: 41.606, w: 42.941, h: 24.364 },
+  { l: 50.196, t: 66.348, w: 42.941, h: 24.182 },
+] as const;
 
 interface WizardState {
   // Step 1 — Identity
@@ -39,8 +64,8 @@ interface WizardState {
   // Step 5 — Testimonials
   testimonials: Testimonial[];
 
-  // Step 6 — Gallery (not file upload in MVP — paths typed/pasted)
-  gallery_sections: GallerySection[];
+  // Step 6 — Gallery
+  gallery_slides: GallerySlide[];
 
   // Step 7 — Content Creation
   photo_album_url: string;
@@ -55,12 +80,6 @@ const EMPTY_TESTIMONIALS: Testimonial[] = Array(5).fill(null).map(() => ({
   quote: "", attribution: "",
 }));
 
-const EMPTY_GALLERY: GallerySection[] = [
-  { title: "The Starting Grid", photos: [] },
-  { title: "The Rally", photos: [] },
-  { title: "The Main Event", photos: [] },
-];
-
 const INITIAL: WizardState = {
   event_name: "", partners: "",
   intro_body: "",
@@ -71,7 +90,7 @@ const INITIAL: WizardState = {
   total_shares: "", total_comments: "", total_saves: "",
   posts_csv: "",
   testimonials: EMPTY_TESTIMONIALS,
-  gallery_sections: EMPTY_GALLERY,
+  gallery_slides: [makeEmptySlide(), makeEmptySlide(), makeEmptySlide()],
   photo_album_url: "", photo_album_label: "", social_content_count: "",
   guests_csv: "",
 };
@@ -113,11 +132,25 @@ function parseCsvRows(csv: string, keys: string[]): Record<string, string>[] {
 
 // ── Build manifest ────────────────────────────────────────────────────────────
 
-function buildManifest(s: WizardState, partnerName: string): object {
+function buildManifest(
+  s: WizardState,
+  partnerName: string,
+  galleryPaths: Record<string, string> = {},
+): object {
   const posts = parseCsvRows(s.posts_csv,
     ["name", "date", "views", "reach", "likes", "shares", "comments", "saves"]);
 
   const guests = parseCsvRows(s.guests_csv, ["full_name", "email", "exotic_car"]);
+
+  const gallery_slides = s.gallery_slides.map((slide, si) => ({
+    title: slide.title,
+    photos: slide.photos.map((photo, pi) => {
+      if (!photo) return null;
+      const key  = `gallery_${si}_${pi}`;
+      const path = galleryPaths[key] ?? "";
+      return { path, pos_x: photo.posX, pos_y: photo.posY };
+    }),
+  }));
 
   return {
     event_name:   s.event_name.trim(),
@@ -143,10 +176,7 @@ function buildManifest(s: WizardState, partnerName: string): object {
     },
     meta_posts: posts,
     testimonials: s.testimonials.filter(t => t.quote.trim()),
-    gallery_sections: s.gallery_sections.map(g => ({
-      title:  g.title,
-      photos: g.photos.filter(p => p.trim()),
-    })),
+    gallery_slides,
     photo_album_url:      s.photo_album_url.trim(),
     photo_album_label:    s.photo_album_label.trim(),
     social_content_count: s.social_content_count.trim() || "0",
@@ -452,34 +482,275 @@ function Step5({ s, set }: { s: WizardState; set: (k: keyof WizardState, v: unkn
   );
 }
 
-function Step6({ s, set }: { s: WizardState; set: (k: keyof WizardState, v: unknown) => void }) {
-  const updateSection = (i: number, field: keyof GallerySection, val: unknown) => {
-    const gs = [...s.gallery_sections];
-    gs[i] = { ...gs[i], [field]: val };
-    set("gallery_sections", gs);
+// ── PhotoSlot ─────────────────────────────────────────────────────────────────
+
+function PhotoSlot({
+  photo, onAssign, onClear, onMove, slotIndex,
+}: {
+  photo: PhotoCrop | null;
+  onAssign: (f: File) => void;
+  onClear: () => void;
+  onMove: (dx: number, dy: number, rect: DOMRect) => void;
+  slotIndex: number;
+}) {
+  const inputRef  = useRef<HTMLInputElement>(null);
+  const slotRef   = useRef<HTMLDivElement>(null);
+  const dragRef   = useRef<{ x: number; y: number } | null>(null);
+  const isDragging = useRef(false);
+
+  // Global mousemove / mouseup during drag
+  useEffect(() => {
+    const onMove_ = (e: MouseEvent) => {
+      if (!dragRef.current || !slotRef.current) return;
+      const dx = e.clientX - dragRef.current.x;
+      const dy = e.clientY - dragRef.current.y;
+      dragRef.current = { x: e.clientX, y: e.clientY };
+      onMove(dx, dy, slotRef.current.getBoundingClientRect());
+    };
+    const onUp = () => {
+      dragRef.current = null;
+      isDragging.current = false;
+      document.body.style.cursor = "";
+      document.body.style.userSelect = "";
+    };
+    document.addEventListener("mousemove", onMove_);
+    document.addEventListener("mouseup", onUp);
+    return () => {
+      document.removeEventListener("mousemove", onMove_);
+      document.removeEventListener("mouseup", onUp);
+    };
+  }, [onMove]);
+
+  const handleDrop = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    const f = e.dataTransfer.files[0];
+    if (f && f.type.startsWith("image/")) onAssign(f);
+  }, [onAssign]);
+
+  const startDrag = (e: React.MouseEvent) => {
+    if (!photo) return;
+    e.preventDefault();
+    dragRef.current = { x: e.clientX, y: e.clientY };
+    isDragging.current = true;
+    document.body.style.cursor = "grabbing";
+    document.body.style.userSelect = "none";
   };
+
   return (
-    <div className="space-y-6">
-      <p className="text-[11px] text-[rgba(255,255,255,0.4)]">
-        3 gallery sections (2 slides each for sections 1-2, 3 slides for section 3).
-        Enter absolute file paths to your photos — one per line.
-      </p>
-      {s.gallery_sections.map((g, i) => (
-        <div key={i} className="border border-[rgba(255,255,255,0.08)] rounded-lg p-4 space-y-3">
-          <div>
-            <Label>Section {i + 1} Title</Label>
-            <Input value={g.title} onChange={v => updateSection(i, "title", v)}
-              placeholder={["The Starting Grid","The Rally","The Main Event"][i]} />
+    <div
+      ref={slotRef}
+      className="absolute overflow-hidden"
+      style={{
+        left:   `${PHOTO_SLOTS[slotIndex].l}%`,
+        top:    `${PHOTO_SLOTS[slotIndex].t}%`,
+        width:  `${PHOTO_SLOTS[slotIndex].w}%`,
+        height: `${PHOTO_SLOTS[slotIndex].h}%`,
+        cursor: photo ? "grab" : "pointer",
+      }}
+      onDragOver={e => { e.preventDefault(); }}
+      onDrop={handleDrop}
+      onClick={() => { if (!photo) inputRef.current?.click(); }}
+      onMouseDown={startDrag}
+    >
+      <input
+        ref={inputRef}
+        type="file"
+        accept="image/*"
+        className="hidden"
+        onChange={e => { const f = e.target.files?.[0]; if (f) onAssign(f); e.target.value = ""; }}
+      />
+
+      {photo ? (
+        <>
+          {/* Photo with focal-point crop */}
+          <img
+            src={photo.url}
+            alt=""
+            draggable={false}
+            className="absolute inset-0 w-full h-full pointer-events-none"
+            style={{
+              objectFit:      "cover",
+              objectPosition: `${photo.posX}% ${photo.posY}%`,
+            }}
+          />
+          {/* Clear button */}
+          <button
+            className="absolute top-1 right-1 z-10 w-5 h-5 rounded-full bg-[rgba(0,0,0,0.7)]
+              text-white text-[10px] flex items-center justify-center
+              hover:bg-[rgba(255,60,60,0.85)] transition-colors"
+            onMouseDown={e => e.stopPropagation()}
+            onClick={e => { e.stopPropagation(); onClear(); }}
+          >
+            ×
+          </button>
+          {/* Drag hint */}
+          <div className="absolute bottom-1 left-0 right-0 flex justify-center pointer-events-none">
+            <span className="text-[8px] text-[rgba(255,255,255,0.5)] bg-[rgba(0,0,0,0.4)] px-1.5 py-0.5 rounded-full">
+              drag to reposition
+            </span>
           </div>
-          <div>
-            <Label>Photo Paths (one per line, max {i < 2 ? 16 : 21})</Label>
-            <Textarea rows={6}
-              value={g.photos.join("\n")}
-              onChange={v => updateSection(i, "photos", v.split("\n"))}
-              placeholder={"/Users/you/Photos/event/grid-01.jpg\n/Users/you/Photos/event/grid-02.jpg"} />
+        </>
+      ) : (
+        <div className="w-full h-full flex flex-col items-center justify-center
+          border-2 border-dashed border-[rgba(255,255,255,0.18)]
+          bg-[rgba(255,255,255,0.02)] hover:bg-[rgba(255,255,255,0.05)] transition-colors">
+          <span className="text-[rgba(255,255,255,0.25)] text-xl mb-1">+</span>
+          <span className="text-[8px] text-[rgba(255,255,255,0.2)] text-center px-1">
+            drop or click
+          </span>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── GalleryStep ───────────────────────────────────────────────────────────────
+
+function GalleryStep({
+  slides, onChange,
+}: {
+  slides: GallerySlide[];
+  onChange: (slides: GallerySlide[]) => void;
+}) {
+  const [activeTab, setActiveTab] = useState(0);
+
+  // Revoke old object URLs on unmount
+  useEffect(() => {
+    return () => {
+      slides.forEach(s => s.photos.forEach(p => { if (p) URL.revokeObjectURL(p.url); }));
+    };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const updateSlide = (si: number, patch: Partial<GallerySlide>) => {
+    const next = slides.map((s, i) => i === si ? { ...s, ...patch } : s);
+    onChange(next);
+  };
+
+  const assignPhoto = (si: number, pi: number, file: File) => {
+    const slides_ = [...slides];
+    const old = slides_[si].photos[pi];
+    if (old) URL.revokeObjectURL(old.url);
+    const photos = [...slides_[si].photos] as (PhotoCrop | null)[];
+    photos[pi] = { file, url: URL.createObjectURL(file), posX: 50, posY: 50 };
+    updateSlide(si, { photos });
+  };
+
+  const clearPhoto = (si: number, pi: number) => {
+    const photos = [...slides[si].photos] as (PhotoCrop | null)[];
+    if (photos[pi]) URL.revokeObjectURL(photos[pi]!.url);
+    photos[pi] = null;
+    updateSlide(si, { photos });
+  };
+
+  const movePhoto = useCallback((si: number, pi: number, dx: number, dy: number, rect: DOMRect) => {
+    const slides_ = [...slides];
+    const photo   = slides_[si].photos[pi];
+    if (!photo) return;
+    const photos  = [...slides_[si].photos] as (PhotoCrop | null)[];
+    photos[pi] = {
+      ...photo,
+      posX: Math.max(0, Math.min(100, photo.posX - (dx / rect.width)  * 100)),
+      posY: Math.max(0, Math.min(100, photo.posY - (dy / rect.height) * 100)),
+    };
+    const next = slides_.map((s, i) => i === si ? { ...s, photos } : s);
+    onChange(next);
+  }, [slides, onChange]);
+
+  const addSlide = () => {
+    if (slides.length >= 3) return;   // max 3 supported
+    onChange([...slides, makeEmptySlide()]);
+    setActiveTab(slides.length);
+  };
+
+  const removeSlide = (si: number) => {
+    if (slides.length <= 1) return;
+    slides[si].photos.forEach(p => { if (p) URL.revokeObjectURL(p.url); });
+    const next = slides.filter((_, i) => i !== si);
+    onChange(next);
+    setActiveTab(Math.min(activeTab, next.length - 1));
+  };
+
+  const slide = slides[activeTab] ?? slides[0];
+
+  return (
+    <div className="space-y-4">
+      {/* ── Tab bar ─────────────────────────────────────────────────── */}
+      <div className="flex items-center gap-1 flex-wrap">
+        {slides.map((_, i) => (
+          <button
+            key={i}
+            onClick={() => setActiveTab(i)}
+            className={`px-3 py-1 rounded text-[11px] tracking-wider uppercase transition-all ${
+              i === activeTab
+                ? "bg-[rgba(201,169,110,0.2)] text-[rgba(201,169,110,0.9)] border border-[rgba(201,169,110,0.4)]"
+                : "text-[rgba(255,255,255,0.35)] hover:text-[rgba(255,255,255,0.7)] border border-transparent"
+            }`}
+          >
+            Slide {i + 1}
+          </button>
+        ))}
+        {slides.length < 3 && (
+          <button
+            onClick={addSlide}
+            className="px-2.5 py-1 rounded text-[11px] text-[rgba(201,169,110,0.6)]
+              border border-[rgba(201,169,110,0.2)] hover:border-[rgba(201,169,110,0.5)]
+              hover:text-[rgba(201,169,110,0.9)] transition-all"
+          >
+            + Add Slide
+          </button>
+        )}
+        {slides.length > 1 && (
+          <button
+            onClick={() => removeSlide(activeTab)}
+            className="ml-auto px-2.5 py-1 rounded text-[10px] text-[rgba(255,80,80,0.5)]
+              border border-[rgba(255,80,80,0.15)] hover:border-[rgba(255,80,80,0.4)]
+              hover:text-[rgba(255,80,80,0.8)] transition-all"
+          >
+            Remove Slide {activeTab + 1}
+          </button>
+        )}
+      </div>
+
+      {/* ── Slide title input ────────────────────────────────────────── */}
+      <div>
+        <Label>Gallery Slide {activeTab + 1} Title</Label>
+        <Input
+          value={slide.title}
+          onChange={v => updateSlide(activeTab, { title: v })}
+          placeholder="e.g. The Starting Grid"
+        />
+        <p className="text-[10px] text-[rgba(255,255,255,0.25)] mt-1">
+          Font will auto-shrink in the PPTX if text is too long for the title bar.
+        </p>
+      </div>
+
+      {/* ── Slide preview with 6 photo slots ────────────────────────── */}
+      <div className="rounded-lg overflow-hidden border border-[rgba(255,255,255,0.08)]">
+        {/* Preserve portrait 8.5×11 aspect ratio */}
+        <div
+          className="relative w-full bg-[#080808]"
+          style={{ paddingBottom: `${(10_058_400 / 7_772_400) * 100}%` }}
+        >
+          <div className="absolute inset-0">
+            {Array.from({ length: 6 }, (_, pi) => (
+              <PhotoSlot
+                key={pi}
+                slotIndex={pi}
+                photo={slide.photos[pi]}
+                onAssign={f => assignPhoto(activeTab, pi, f)}
+                onClear={() => clearPhoto(activeTab, pi)}
+                onMove={(dx, dy, rect) => movePhoto(activeTab, pi, dx, dy, rect)}
+              />
+            ))}
           </div>
         </div>
-      ))}
+      </div>
+
+      <p className="text-[10px] text-[rgba(255,255,255,0.2)]">
+        Slot positions match the PPTX layout exactly.
+        Drag a photo within its slot to reposition the crop.
+      </p>
     </div>
   );
 }
@@ -665,6 +936,13 @@ export default function ReportWizard() {
       if (assets.cover)     form.append("cover",     assets.cover);
       if (assets.title_png) form.append("title_png", assets.title_png);
 
+      // Append all gallery photos keyed as gallery_slideIndex_slotIndex
+      state.gallery_slides.forEach((slide, si) => {
+        slide.photos.forEach((photo, pi) => {
+          if (photo?.file) form.append(`gallery_${si}_${pi}`, photo.file);
+        });
+      });
+
       const upRes = await fetch("/api/upload-assets", { method: "POST", body: form });
       if (!upRes.ok) {
         const err = await upRes.json().catch(() => ({ error: "Upload failed" }));
@@ -685,11 +963,12 @@ export default function ReportWizard() {
     partners.forEach(p => { init[p] = { pct: 0, step: "Queued…" }; });
     setPartnerProgress(init);
 
+    const galleryPaths = (assetPaths as Record<string, unknown>).gallery_photos as Record<string, string> ?? {};
     const body = {
-      event_base:    buildManifest(state, "__placeholder__"),
-      partners:      partners.map(name => ({ name })),
-      template_path: assetPaths.template,
-      cover_path:    assetPaths.cover    ?? null,
+      event_base:     buildManifest(state, "__placeholder__", galleryPaths),
+      partners:       partners.map(name => ({ name })),
+      template_path:  assetPaths.template,
+      cover_path:     assetPaths.cover     ?? null,
       title_png_path: assetPaths.title_png ?? null,
     };
     // Remove partner_name from event_base (it's set per-partner by the API)
@@ -735,7 +1014,10 @@ export default function ReportWizard() {
     <Step3 key={2} s={state} set={set} />,
     <Step4 key={3} s={state} set={set} />,
     <Step5 key={4} s={state} set={set} />,
-    <Step6 key={5} s={state} set={set} />,
+    <GalleryStep key={5}
+      slides={state.gallery_slides}
+      onChange={slides => set("gallery_slides", slides)}
+    />,
     <Step7 key={6} s={state} set={set} />,
     <Step8 key={7} s={state} set={set} />,
   ];

@@ -1,246 +1,363 @@
 """
-Photo gallery slides (12–18).
+Photo gallery slides (slides 12–14 in template = user slides 1–3).
 
-Template layout:
-  Slide 12: "The starting grid" — 8 picture placeholders
-  Slide 13: "The starting grid" (cont.) — 8 placeholders
-  Slide 14: "The hill country rally" — 8 placeholders
-  Slide 15: "The hill country rally" (cont.) — 8 placeholders
-  Slide 16: "The Main event" — 7 placeholders
-  Slide 17: "The Main event" (cont.) — 7 placeholders
-  Slide 18: "The Main event" (cont.) — 7 placeholders
+Standard: 3 gallery slides, each with exactly 6 photo placeholders.
 
-CRITICAL RULES:
-  1. NEVER touch Picture Placeholder 19 (idx=4294967295) — master-inherited frosted glass
-  2. Only replace the r:embed Target in the rels file for user-provided photos
-  3. If fewer photos than slots, leave remaining slots with their template images
-  4. Photo cropping handled by photo_utils before injection
+Slot layout (from slideLayout3.xml) — 6 slots, left column first:
+  Slot 0  idx=20  L1  x=6.793%  y=17.045%  w=42.824%  h=18.091%  ar≈1.829
+  Slot 1  idx=26  L2  x=6.793%  y=35.510%  w=42.824%  h=18.091%  ar≈1.829
+  Slot 2  idx=27  L3  x=6.793%  y=53.975%  w=42.824%  h=18.091%  ar≈1.829
+  Slot 3  idx=17  R1  x=50.196% y=17.045%  w=42.941%  h=24.182%  ar≈1.372
+  Slot 4  idx=29  R2  x=50.196% y=41.606%  w=42.941%  h=24.364%  ar≈1.362
+  Slot 5  idx=30  R3  x=50.196% y=66.348%  w=42.941%  h=24.182%  ar≈1.372
 
-Gallery section → slides mapping (template):
-  section[0] → slides 12, 13  (8 slots each)
-  section[1] → slides 14, 15  (8 slots each)
-  section[2] → slides 16, 17, 18  (7 slots each)
+idx=28 (4th left slot) is REMOVED from every gallery slide (slide background shows).
+idx=4294967295 is the master-inherited frosted-glass header — NEVER touched.
 
-The generator uses exactly these slides. If user provides more gallery
-sections than 3, extra sections are appended by duplicating the last gallery
-slide pair (not yet implemented — V1 supports exactly 3 sections).
+Title text: "Text Placeholder 7" — sz=3800 (38pt) — normAutofit enabled.
 """
 from __future__ import annotations
 import os
 import re
 import shutil
-from ..manifest import ReportManifest, GallerySection
+import struct
+from pathlib import Path
+from typing import Optional
+from ..manifest import ReportManifest, GallerySlide, PhotoEntry
 from ..xml_utils import (
     read_slide, write_slide, read_rels, write_rels,
-    set_footer_text, replace_run_text, get_rId_for_placeholder,
-    update_rel_target, MASTER_PH_IDX,
+    set_footer_text, update_rel_target, MASTER_PH_IDX,
 )
-from ..photo_utils import prepare_photo, ext_to_mime
 
-# Template slide groups for each gallery section (slide name, slots)
-GALLERY_GROUPS = [
-    # section 0: Starting grid
-    [("slide12.xml", 8), ("slide13.xml", 8)],
-    # section 1: Hill country rally
-    [("slide14.xml", 8), ("slide15.xml", 8)],
-    # section 2: Main event
-    [("slide16.xml", 7), ("slide17.xml", 7), ("slide18.xml", 7)],
-]
+# ── Constants ──────────────────────────────────────────────────────────────────
 
-# All gallery slides
-ALL_GALLERY_SLIDES = [
-    s for group in GALLERY_GROUPS for (s, _) in group
-]
+# Template slides used for gallery (in order)
+GALLERY_SLIDE_NAMES = ["slide12.xml", "slide13.xml", "slide14.xml"]
 
-# Placeholder idx order for each slide (left→right, top→bottom)
-# From analysis — excludes idx=4294967295 (master header image)
-# These are the CONTENT placeholders that can be replaced.
-SLIDE_PH_ORDER: dict[str, list[str]] = {
-    "slide12.xml": ["20", "17", "26", "27", "28", "29", "30"],   # idx values
-    "slide13.xml": ["20", "17", "26", "27", "28", "29", "30"],
-    "slide14.xml": ["20", "17", "26", "27", "28", "29", "30"],
-    "slide15.xml": ["20", "17", "26", "27", "28", "29", "30"],
-    "slide16.xml": ["16", "17", "18", "19_c", "20_c", "21_c", "22_c"],
-    "slide17.xml": ["16", "17", "18", "19_c", "20_c", "21_c", "22_c"],
-    "slide18.xml": ["16", "17", "18", "19_c", "20_c", "21_c", "22_c"],
+# Extra template gallery slides — deleted from output if not needed
+GALLERY_EXTRA_SLIDES = ["slide15.xml", "slide16.xml", "slide17.xml", "slide18.xml"]
+
+# The 6 active slot placeholder indices, in UI/manifest order (L1 L2 L3 R1 R2 R3)
+SLOT_INDICES = ["20", "26", "27", "17", "29", "30"]
+
+# 4th-left slot: idx=28 — always removed (gives us the 6-slot layout)
+REMOVE_IDX = "28"
+
+# Actual placeholder dimensions from slideLayout3.xml (EMU)
+SLOT_DIMS: dict[str, tuple[int, int]] = {
+    "20": (3_328_416, 1_819_656),   # ar ≈ 1.829
+    "26": (3_328_416, 1_819_656),
+    "27": (3_328_416, 1_819_656),
+    "17": (3_337_560, 2_432_304),   # ar ≈ 1.372
+    "29": (3_337_560, 2_450_592),   # ar ≈ 1.362
+    "30": (3_337_560, 2_432_304),
 }
 
 
-def _get_layout_dims(unpacked_dir: str, slide_name: str) -> dict[str, tuple[int, int]]:
+# ── Image dimension helpers ────────────────────────────────────────────────────
+
+def _png_dimensions(path: str) -> tuple[int, int]:
+    with open(path, "rb") as f:
+        if f.read(8) != b"\x89PNG\r\n\x1a\n":
+            raise ValueError("Not a PNG")
+        f.read(4)  # IHDR length
+        if f.read(4) != b"IHDR":
+            raise ValueError("Missing IHDR")
+        w = struct.unpack(">I", f.read(4))[0]
+        h = struct.unpack(">I", f.read(4))[0]
+    return w, h
+
+
+def _jpeg_dimensions(path: str) -> tuple[int, int]:
+    with open(path, "rb") as f:
+        if f.read(2) != b"\xff\xd8":
+            raise ValueError("Not a JPEG")
+        while True:
+            marker = f.read(2)
+            if len(marker) < 2 or marker[0] != 0xFF:
+                break
+            if marker[1] in (0xC0, 0xC1, 0xC2, 0xC3, 0xC5, 0xC6, 0xC7,
+                              0xC9, 0xCA, 0xCB, 0xCD, 0xCE, 0xCF):
+                f.read(3)
+                h = struct.unpack(">H", f.read(2))[0]
+                w = struct.unpack(">H", f.read(2))[0]
+                return w, h
+            else:
+                n = struct.unpack(">H", f.read(2))[0]
+                f.seek(n - 2, 1)
+    raise ValueError(f"Cannot read JPEG dims: {path}")
+
+
+def _image_dimensions(path: str) -> tuple[int, int]:
+    """Return (width, height) for PNG or JPEG without external deps."""
+    try:
+        from PIL import Image  # type: ignore
+        with Image.open(path) as img:
+            return img.width, img.height
+    except ImportError:
+        pass
+    ext = Path(path).suffix.lower()
+    if ext == ".png":
+        return _png_dimensions(path)
+    return _jpeg_dimensions(path)
+
+
+# ── srcRect calculation ────────────────────────────────────────────────────────
+
+def _calc_src_rect(
+    img_w: int, img_h: int,
+    ph_cx: int, ph_cy: int,
+    pos_x: float, pos_y: float,
+) -> dict[str, int]:
     """
-    Return {idx: (cx_emu, cy_emu)} from the slide's layout for all picture
-    placeholders.  Slides inherit placeholder dimensions from their layout when
-    the slide XML doesn't override them.
+    Compute OOXML srcRect values (0–100000) for a cover-crop with focal point.
+
+    pos_x / pos_y: 0=left/top, 50=center, 100=right/bottom (0–100 range).
+    Returns dict with keys l, t, r, b — units: thousandths of a percent.
     """
-    EMU = 914400
-    # Read slide rels to find layout path
-    rels_path = os.path.join(unpacked_dir, "ppt", "slides", "_rels",
-                             slide_name + ".rels")
-    with open(rels_path, "r", encoding="utf-8") as f:
-        slide_rels = f.read()
+    ph_ar  = ph_cx / ph_cy if ph_cy else 1.0
+    img_ar = img_w / img_h if img_h else 1.0
 
-    layout_m = re.search(
-        r'Type="[^"]*slideLayout"[^>]+Target="([^"]+)"', slide_rels
-    )
-    if not layout_m:
-        return {}
-
-    # Target is relative to ppt/slides/, so ../slideLayouts/slideLayoutN.xml
-    layout_rel = layout_m.group(1)
-    layout_path = os.path.normpath(
-        os.path.join(unpacked_dir, "ppt", "slides", layout_rel)
-    )
-    if not os.path.exists(layout_path):
-        return {}
-
-    with open(layout_path, "r", encoding="utf-8") as f:
-        lxml = f.read()
-
-    dims: dict[str, tuple[int, int]] = {}
-    for sp_m in re.finditer(r"<p:sp>(.*?)</p:sp>", lxml, re.DOTALL):
-        sp = sp_m.group(1)
-        idx_m = re.search(r'idx="(\d+)"', sp)
-        cx_m  = re.search(r"<a:ext[^>]+cx=\"(\d+)\"[^>]+cy=\"(\d+)\"", sp)
-        if idx_m and cx_m:
-            dims[idx_m.group(1)] = (int(cx_m.group(1)), int(cx_m.group(2)))
-    return dims
-
-
-def _get_crop_key(pic_xml: str, layout_dims: dict[str, tuple[int, int]]) -> str:
-    """
-    Determine the correct photo_utils crop key for a picture placeholder.
-    Reads cx/cy from the pic XML first; falls back to layout dims.
-    Maps aspect ratio to the nearest known crop type.
-    """
-    idx_m = re.search(r'idx="(\d+)"', pic_xml)
-    idx   = idx_m.group(1) if idx_m else ""
-
-    # Try to get dims from slide XML first (xfrm)
-    cx_m = re.search(
-        r"<a:xfrm[^>]*>.*?<a:ext[^>]+cx=\"(\d+)\"[^>]+cy=\"(\d+)\"",
-        pic_xml, re.DOTALL,
-    )
-    if cx_m:
-        cx, cy = int(cx_m.group(1)), int(cx_m.group(2))
-    elif idx and idx in layout_dims:
-        cx, cy = layout_dims[idx]
+    if img_ar >= ph_ar:
+        # Image wider → scale to fill height, crop sides
+        scale   = ph_cy / img_h
+        sc_w    = img_w * scale        # scaled image width
+        sc_h    = ph_cy               # exact match
+        excess_w = sc_w - ph_cx
+        excess_h = 0.0
     else:
-        return "left_short"  # safe fallback
+        # Image taller → scale to fill width, crop top/bottom
+        scale   = ph_cx / img_w
+        sc_w    = ph_cx
+        sc_h    = img_h * scale
+        excess_w = 0.0
+        excess_h = sc_h - ph_cy
 
-    ar = cx / cy if cy else 1.0
-    # Three buckets from template analysis:
-    #   ar ≈ 1.829 → "left_short"   (3.640" × 1.990")
-    #   ar ≈ 1.372 → "right_tall"   (3.650" × 2.660")
-    #   ar ≈ 1.362 → "right_xtall"  (3.650" × 2.680")
-    if ar > 1.6:
-        return "left_short"
-    elif ar > 1.35:
-        return "right_tall"
-    else:
-        return "right_xtall"
+    focal_x = pos_x / 100.0   # 0.0 – 1.0
+    focal_y = pos_y / 100.0
+
+    left_px  = focal_x * excess_w
+    right_px = excess_w - left_px
+    top_px   = focal_y * excess_h
+    bot_px   = excess_h - top_px
+
+    def _pct(px: float, total: float) -> int:
+        if total <= 0:
+            return 0
+        return max(0, min(100_000, int(px / total * 100_000)))
+
+    return {
+        "l": _pct(left_px,  sc_w),
+        "r": _pct(right_px, sc_w),
+        "t": _pct(top_px,   sc_h),
+        "b": _pct(bot_px,   sc_h),
+    }
 
 
-def _inject_photos_into_slide(
+# ── Slide XML helpers ──────────────────────────────────────────────────────────
+
+def _remove_pic_by_idx(xml: str, idx: str) -> str:
+    """Remove the <p:pic>…</p:pic> block whose <p:ph idx="…"> matches idx."""
+    def replacer(m: re.Match) -> str:
+        block = m.group(0)
+        if re.search(rf'idx="{re.escape(idx)}"', block):
+            return ""
+        return block
+    return re.sub(r"<p:pic>.*?</p:pic>", replacer, xml, flags=re.DOTALL)
+
+
+def _get_pic_rid(xml: str, idx: str) -> Optional[str]:
+    """Return the r:embed rId for the p:pic with the given placeholder idx."""
+    for m in re.finditer(r"<p:pic>(.*?)</p:pic>", xml, re.DOTALL):
+        block = m.group(1)
+        if re.search(rf'idx="{re.escape(idx)}"', block):
+            rid = re.search(r'r:embed="(rId\d+)"', block)
+            if rid:
+                return rid.group(1)
+    return None
+
+
+def _set_blip_fill_src_rect(xml: str, rid: str, src_rect: dict[str, int]) -> str:
+    """
+    Within the p:pic that has r:embed="<rid>", update its a:blipFill to include
+    the given srcRect (replacing any existing one).
+    """
+    src_tag = (
+        f'<a:srcRect l="{src_rect["l"]}" t="{src_rect["t"]}" '
+        f'r="{src_rect["r"]}" b="{src_rect["b"]}"/>'
+    )
+
+    def replacer(m: re.Match) -> str:
+        block = m.group(0)
+        if f'r:embed="{rid}"' not in block:
+            return block
+        # Remove existing srcRect if any
+        inner = re.sub(r"<a:srcRect[^/]*/>\s*", "", block)
+        # Insert after <a:blip …/>
+        inner = re.sub(
+            r"(<a:blip[^/]*/>\s*)",
+            rf"\1{src_tag}",
+            inner,
+        )
+        return inner
+
+    return re.sub(r"<p:pic>.*?</p:pic>", replacer, xml, flags=re.DOTALL)
+
+
+def _update_gallery_title(xml: str, title: str) -> str:
+    """
+    Replace the text in 'Text Placeholder 7' and enable normAutofit
+    so long titles shrink automatically.
+    """
+    def replacer(m: re.Match) -> str:
+        block = m.group(0)
+        if "Text Placeholder 7" not in block:
+            return block
+
+        # Replace all <a:t> content with the new title in a single run
+        # Preserve the first run's formatting (font, colour etc.)
+        first_run = re.search(r"(<a:r>)(.*?)(</a:r>)", block, re.DOTALL)
+        if first_run:
+            run_inner = re.sub(r"<a:t>[^<]*</a:t>", f"<a:t>{title}</a:t>",
+                               first_run.group(2))
+            new_run = first_run.group(1) + run_inner + first_run.group(3)
+            # Replace all runs with just this one
+            block = re.sub(r"<a:r>.*?</a:r>", "", block, flags=re.DOTALL)
+            block = block.replace("</a:p>", new_run + "</a:p>", 1)
+
+        # Enable normAutofit (shrink text to fit)
+        if "<a:normAutofit" not in block and "<a:spAutoFit" not in block:
+            block = re.sub(
+                r"(<a:bodyPr\b[^>]*/?>)",
+                r"\1<a:normAutofit/>",
+                block,
+            )
+            # If bodyPr is self-closing, convert to open/close form first
+            block = re.sub(
+                r"(<a:bodyPr\b[^>]*)/><a:normAutofit/>",
+                r"\1><a:normAutofit/></a:bodyPr>",
+                block,
+            )
+
+        return block
+
+    return re.sub(r"<p:sp>.*?</p:sp>", replacer, xml, flags=re.DOTALL)
+
+
+# ── Photo injection ────────────────────────────────────────────────────────────
+
+def _inject_photo(
     unpacked_dir: str,
     slide_name: str,
-    photos: list[str],
-) -> None:
+    xml: str,
+    rels: str,
+    idx: str,
+    photo: PhotoEntry,
+) -> tuple[str, str]:
     """
-    Inject up to len(photos) images into the picture placeholders of one slide.
-    Skips the master-inherited placeholder (idx=4294967295).
-    Reads actual placeholder dimensions (from slide or layout) to pick the
-    correct smart-crop aspect ratio for each slot.
+    Inject one photo into the slot with placeholder idx.
+    Returns updated (xml, rels).
     """
-    xml  = read_slide(unpacked_dir, slide_name)
-    rels = read_rels(unpacked_dir, slide_name)
+    if not photo.path or not os.path.exists(photo.path):
+        return xml, rels
+
     media_dir = os.path.join(unpacked_dir, "ppt", "media")
 
-    # Get layout dims for inherited placeholders
-    layout_dims = _get_layout_dims(unpacked_dir, slide_name)
+    # Find existing rId for this slot
+    rid = _get_pic_rid(xml, idx)
+    if not rid:
+        return xml, rels
 
-    # Build ordered list of (pic_xml, idx, rId) — excluding master placeholder
-    slots: list[tuple[str, str, str]] = []
-    for pic_m in re.finditer(r"<p:pic>(.*?)</p:pic>", xml, re.DOTALL):
-        pic     = pic_m.group(1)
-        idx_m   = re.search(r'idx="(\d+)"', pic)
-        embed_m = re.search(r'r:embed="(rId\d+)"', pic)
-        if not idx_m or not embed_m:
+    # Determine existing media filename from rels
+    target_m = re.search(
+        rf'Id="{re.escape(rid)}"[^>]+Target="\.\./media/([^"]+)"', rels
+    )
+    if not target_m:
+        return xml, rels
+    existing_name = target_m.group(1)
+
+    # Copy new photo into media dir — keep original extension, reuse slot name stem
+    stem      = os.path.splitext(existing_name)[0]
+    src_ext   = Path(photo.path).suffix.lower()
+    new_name  = f"{stem}{src_ext}"
+    dest_path = os.path.join(media_dir, new_name)
+    shutil.copy2(photo.path, dest_path)
+
+    # Update rels target
+    if new_name != existing_name:
+        rels = update_rel_target(rels, rid, f"../media/{new_name}")
+
+    # Compute srcRect from image dims + focal point
+    try:
+        img_w, img_h = _image_dimensions(photo.path)
+        ph_cx, ph_cy = SLOT_DIMS.get(idx, (3_328_416, 1_819_656))
+        src_rect = _calc_src_rect(img_w, img_h, ph_cx, ph_cy,
+                                   photo.pos_x, photo.pos_y)
+    except Exception:
+        src_rect = {"l": 0, "t": 0, "r": 0, "b": 0}
+
+    # Inject srcRect into blipFill
+    xml = _set_blip_fill_src_rect(xml, rid, src_rect)
+
+    return xml, rels
+
+
+# ── Public API ─────────────────────────────────────────────────────────────────
+
+def edit(
+    unpacked_dir: str,
+    manifest: ReportManifest,
+) -> tuple[list[str], list[str]]:
+    """
+    Edit gallery slides.
+
+    Uses template slides 12, 13, 14 (index 0–2).
+    Extra template slides 15–18 are returned in the delete list.
+
+    Returns:
+        kept:   list of slide filenames kept (e.g. ["slide12.xml", ...])
+        delete: list of slide filenames to remove from presentation
+    """
+    footer  = f"{manifest.event_name} Official Event Report - For {manifest.partner_name}"
+    slides  = manifest.gallery_slides  # user-provided, up to 3
+
+    kept:   list[str] = []
+    delete: list[str] = list(GALLERY_EXTRA_SLIDES)  # always remove extras
+
+    for i, tmpl_slide in enumerate(GALLERY_SLIDE_NAMES):
+        if i >= len(slides):
+            # No user slide for this template slot → delete it
+            delete.append(tmpl_slide)
             continue
-        idx = idx_m.group(1)
-        if idx == MASTER_PH_IDX:
-            continue
-        slots.append((pic, idx, embed_m.group(1)))
 
-    for i, (pic_xml, idx, rId) in enumerate(slots):
-        if i >= len(photos):
-            break
+        user_slide: GallerySlide = slides[i]
+        xml  = read_slide(unpacked_dir, tmpl_slide)
+        rels = read_rels(unpacked_dir, tmpl_slide)
 
-        src_path = photos[i]
-        if not src_path or not os.path.exists(src_path):
-            continue
+        # 1. Remove the 4th-left slot (idx=28) — gives clean 6-slot layout
+        xml = _remove_pic_by_idx(xml, REMOVE_IDX)
 
-        # Pick correct crop aspect ratio from actual placeholder dimensions
-        ph_key = _get_crop_key(pic_xml, layout_dims)
+        # 2. Update gallery title
+        if user_slide.title:
+            xml = _update_gallery_title(xml, user_slide.title)
 
-        # Find the existing media filename from rels
-        target_m = re.search(
-            rf'Id="{re.escape(rId)}"[^>]+Target="\.\./media/([^"]+)"', rels
-        )
-        if not target_m:
-            continue
-        existing_media = target_m.group(1)
-        dest_filename  = os.path.splitext(existing_media)[0] + ".jpg"
-        dest_path      = os.path.join(media_dir, dest_filename)
+        # 3. Inject photos into their slots
+        for slot_i, idx in enumerate(SLOT_INDICES):
+            photo_entry = (
+                user_slide.photos[slot_i]
+                if slot_i < len(user_slide.photos)
+                else None
+            )
+            if photo_entry and photo_entry.path:
+                xml, rels = _inject_photo(
+                    unpacked_dir, tmpl_slide, xml, rels, idx, photo_entry
+                )
 
-        try:
-            prepare_photo(src_path, dest_path, ph_key)
-        except Exception:
-            shutil.copy2(src_path, dest_path)
+        # 4. Update footer
+        xml = set_footer_text(xml, footer)
 
-        if dest_filename != existing_media:
-            rels = update_rel_target(rels, rId, f"../media/{dest_filename}")
+        write_slide(unpacked_dir, tmpl_slide, xml)
+        write_rels(unpacked_dir, tmpl_slide, rels)
+        kept.append(tmpl_slide)
 
-    write_rels(unpacked_dir, slide_name, rels)
-
-
-def edit(unpacked_dir: str, manifest: ReportManifest) -> None:
-    """Edit all gallery slides."""
-    sections = manifest.gallery_sections
-    footer   = f"{manifest.event_name} Official Event Report - For {manifest.partner_name}"
-
-    for sec_idx, group in enumerate(GALLERY_GROUPS):
-        # Get the corresponding section from manifest (or use empty)
-        section: GallerySection = (
-            sections[sec_idx] if sec_idx < len(sections)
-            else GallerySection(title="", photos=[])
-        )
-        photos = section.photos
-        photo_cursor = 0
-
-        for slide_name, slot_count in group:
-            xml = read_slide(unpacked_dir, slide_name)
-            xml = set_footer_text(xml, footer)
-
-            # Update section title in header bar if provided
-            if section.title:
-                # The header bar TextBox has the section title (e.g. "The starting grid")
-                # We only want to replace the display text, not the AKIRA section label
-                # The section title is in a run with font size ~34-40pt
-                # Strategy: replace the old title text with the new one
-                existing_titles = [
-                    "The starting grid", "the starting grid",
-                    "The hill country rally", "the hill country rally",
-                    "The Main event", "The main event",
-                ]
-                for old_title in existing_titles:
-                    if old_title.lower() in xml.lower():
-                        xml = replace_run_text(xml, old_title, section.title)
-                        break
-
-            write_slide(unpacked_dir, slide_name, xml)
-
-            # Inject photos into this slide's slots
-            slide_photos = photos[photo_cursor:photo_cursor + slot_count]
-            if slide_photos:
-                _inject_photos_into_slide(unpacked_dir, slide_name, slide_photos)
-            photo_cursor += slot_count
+    return kept, delete

@@ -46,12 +46,18 @@ class Testimonial:
 
 
 @dataclass
-class GallerySection:
-    # Section title shown in header bar of gallery slides
+class PhotoEntry:
+    """One photo assigned to a gallery slot, with focal-point crop info."""
+    path: str = ""          # Absolute server-side path to image file
+    pos_x: float = 50.0    # Focal point X, 0–100 (50 = center)
+    pos_y: float = 50.0    # Focal point Y, 0–100 (50 = center)
+
+
+@dataclass
+class GallerySlide:
+    """One gallery slide: a title + exactly 6 photos (None = slot left empty)."""
     title: str = ""
-    # Ordered list of local photo paths.
-    # 7–8 per slide; generator auto-paginates.
-    photos: list[str] = field(default_factory=list)
+    photos: list[Optional[PhotoEntry]] = field(default_factory=list)
 
 
 @dataclass
@@ -87,10 +93,10 @@ class ReportManifest:
     testimonials: list[Testimonial] = field(default_factory=list)
 
     # ── Photo galleries ───────────────────────────────────────────────────
-    # Each GallerySection maps to 1–2 gallery slides (7–8 photos each).
-    # Template has 3 sections: starting_grid, hill_country, main_event.
-    # Provide in the same order; extra sections get new gallery slides.
-    gallery_sections: list[GallerySection] = field(default_factory=list)
+    # Up to 3 gallery slides (standard), each with a title + 6 photos.
+    # Photos are in left-column-first order: L1, L2, L3, R1, R2, R3.
+    # None entries = slot left empty (shows slide background).
+    gallery_slides: list[GallerySlide] = field(default_factory=list)
 
     # ── Content Creation (Slide 19) ───────────────────────────────────────
     photo_album_url: str = ""
@@ -108,13 +114,39 @@ class ReportManifest:
 
 # ── Deserialise from plain dict (comes from JSON API body) ────────────────
 
+def _parse_photo_entry(p: object) -> "Optional[PhotoEntry]":
+    if p is None:
+        return None
+    if isinstance(p, dict):
+        return PhotoEntry(
+            path=p.get("path", "") or "",
+            pos_x=float(p.get("pos_x", 50)),
+            pos_y=float(p.get("pos_y", 50)),
+        )
+    return None
+
+
 def manifest_from_dict(d: dict) -> ReportManifest:
     stats = StatBlock(**d.get("stats", {})) if isinstance(d.get("stats"), dict) else StatBlock()
     mh    = MetaHeadline(**d.get("meta_headline", {})) if isinstance(d.get("meta_headline"), dict) else MetaHeadline()
     posts = [MetaPost(**p) for p in d.get("meta_posts", [])]
     tests = [Testimonial(**t) for t in d.get("testimonials", [])]
-    sects = [GallerySection(**s) for s in d.get("gallery_sections", [])]
     gsts  = [GuestRow(**g) for g in d.get("guests", [])]
+
+    # Parse gallery_slides (new format)
+    raw_slides = d.get("gallery_slides", [])
+    gallery_slides = []
+    for rs in raw_slides:
+        if not isinstance(rs, dict):
+            continue
+        photos = [_parse_photo_entry(p) for p in rs.get("photos", [])]
+        # Pad / trim to exactly 6
+        while len(photos) < 6:
+            photos.append(None)
+        gallery_slides.append(GallerySlide(
+            title=rs.get("title", ""),
+            photos=photos[:6],
+        ))
 
     return ReportManifest(
         event_name=d.get("event_name", ""),
@@ -128,7 +160,7 @@ def manifest_from_dict(d: dict) -> ReportManifest:
         meta_headline=mh,
         meta_posts=posts,
         testimonials=tests,
-        gallery_sections=sects,
+        gallery_slides=gallery_slides,
         photo_album_url=d.get("photo_album_url", ""),
         photo_album_label=d.get("photo_album_label", f"{d.get('event_name','')} Event Photo Album"),
         social_content_count=str(d.get("social_content_count", "0")),

@@ -30,6 +30,71 @@ interface GeneratePayload {
   outputPath:   string
 }
 
+// ── Guide generation types ────────────────────────────────────────────────────
+
+interface GuideScheduleItem {
+  time:     string
+  activity: string
+}
+
+interface GuideEmergencyContact {
+  name:  string
+  phone: string
+}
+
+interface GuidePartnerPayload {
+  name:              string
+  logo_path:         string | null
+  intro_body:        string
+  cover_photo_path?: string | null
+}
+
+interface GuideManifestPayload {
+  event_name:          string
+  event_abbrev:        string
+  partners:            GuidePartnerPayload[]
+  cover_photo_path:    string | null
+  intro_bg_path?:      string | null
+  day1_bg_path?:       string | null
+  venue_bg_path?:      string | null
+  day2_bg_path?:       string | null
+  rally_bg_path?:      string | null
+  poi_bg_path?:        string | null
+  race_bg_path?:       string | null
+  hotel_bg_path?:      string | null
+  rules_bg_path?:      string | null
+  closing_bg_path?:    string | null
+  day1_title?:         string
+  day1_opening:        string
+  day1_items:          GuideScheduleItem[]
+  venue_title?:        string
+  venue_location_name: string
+  venue_arrival_text:  string
+  venue_directions:    string
+  day2_title?:         string
+  day2_opening:        string
+  day2_items:          GuideScheduleItem[]
+  rally_title?:        string
+  include_poi_slide:   boolean
+  poi_title?:          string
+  poi_access_times:    string
+  race_title?:         string
+  race_schedule_title: string
+  race_items:          GuideScheduleItem[]
+  hotel_title:         string
+  rules_general:       string
+  rules_convoy:        string
+  rules_vehicle:       string
+  rules_emergency:     string
+  emergency_contacts:  GuideEmergencyContact[]
+}
+
+interface GuideGeneratePayload {
+  manifest:    GuideManifestPayload
+  tenLogoPath: string | null
+  outputPath:  string
+}
+
 interface ProgressMessage {
   partner?:    string
   pct?:        number
@@ -150,6 +215,11 @@ declare global {
       // Report generation
       startGenerate:      (payload: GeneratePayload) => Promise<{ success: boolean; outputPath: string }>
       onProgress:         (cb: (msg: ProgressMessage) => void) => void
+
+      // Guide generation (no template upload)
+      startGuideGenerate: (payload: GuideGeneratePayload) => Promise<{ success: boolean; outputPath: string }>
+      onGuideProgress:    (cb: (msg: ProgressMessage) => void) => void
+
       removeAllListeners: (channel: string) => void
 
       // Authentication

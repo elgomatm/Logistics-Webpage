@@ -380,6 +380,155 @@ ipcMain.handle('generate:start', async (event, payload) => {
   }
 })
 
+// ── Guide generator helpers ──────────────────────────────────────────────────
+
+function resolveGuidePyBinary() {
+  if (app.isPackaged) {
+    const binaryName = process.platform === 'win32' ? 'generate_guide.exe' : 'generate_guide'
+    return {
+      bin:  path.join(process.resourcesPath, 'generate_guide', binaryName),
+      args: [],
+    }
+  }
+  return {
+    bin:  process.platform === 'win32' ? 'python' : 'python3',
+    args: ['-m', 'scripts.generate_guide.generator'],
+  }
+}
+
+function runGuideGenerator(manifest, partnerIdx, outputPath, tenLogoPath, onProgress) {
+  return new Promise((resolve, reject) => {
+    const tmpManifest = path.join(
+      os.tmpdir(),
+      `ten_guide_manifest_${Date.now()}_${Math.random().toString(36).slice(2)}.json`
+    )
+    fs.writeFileSync(tmpManifest, JSON.stringify(manifest, null, 2))
+
+    const { bin, args } = resolveGuidePyBinary()
+    const fullArgs = [
+      ...args,
+      '--manifest',    tmpManifest,
+      '--output',      outputPath,
+      '--partner-idx', String(partnerIdx),
+    ]
+    if (tenLogoPath) fullArgs.push('--ten-logo', tenLogoPath)
+
+    const cwd = app.isPackaged ? process.resourcesPath : process.cwd()
+    if (app.isPackaged && process.platform !== 'win32') {
+      try { fs.chmodSync(bin, 0o755) } catch {}
+    }
+
+    const proc       = spawn(bin, fullArgs, { cwd })
+    const stderrLines = []
+
+    proc.stdout.on('data', (chunk) => {
+      for (const line of chunk.toString().split('\n')) {
+        const m = line.match(/^\[\s*(\d+)%\]\s+(.+)/)
+        if (m) onProgress(m[2].trim(), parseInt(m[1], 10))
+      }
+    })
+    proc.stderr.on('data', (chunk) => {
+      stderrLines.push(chunk.toString())
+      process.stderr.write(chunk)
+    })
+    proc.on('close', (code) => {
+      try { fs.unlinkSync(tmpManifest) } catch {}
+      if (code === 0) {
+        resolve()
+      } else {
+        const stderrText = stderrLines.join('').trim()
+        const usefulLine = stderrText.split('\n').filter(l => l.trim()).pop() || ''
+        reject(new Error(`Guide generator exited with code ${code}${usefulLine ? ': ' + usefulLine : ''}`))
+      }
+    })
+  })
+}
+
+// ── IPC: Guide batch generate ─────────────────────────────────────────────────
+
+/**
+ * Payload shape:
+ * {
+ *   manifest:    { ...all GuideManifest fields, partners: [...] }
+ *   tenLogoPath: string | null,
+ *   outputPath:  string,   ← where to save the ZIP
+ * }
+ */
+ipcMain.handle('generate:guide:start', async (event, payload) => {
+  const { manifest, tenLogoPath = null, outputPath } = payload
+
+  const partners = manifest.partners || []
+  if (partners.length === 0) {
+    throw new Error('No partners defined in guide manifest.')
+  }
+
+  const tmpDir    = os.tmpdir()
+  const sessionId = `ten_guide_${Date.now()}`
+  const outDir    = path.join(tmpDir, sessionId)
+  fs.mkdirSync(outDir, { recursive: true })
+
+  const progress = {}
+  for (const p of partners) progress[p.name] = 0
+
+  const calcOverall = () => {
+    const vals = Object.values(progress)
+    return Math.round(vals.reduce((a, b) => a + b, 0) / vals.length)
+  }
+
+  const send = (data) => {
+    try { event.sender.send('generate:guide:progress', data) } catch {}
+  }
+
+  const generatedFiles = []
+  const concurrency = Math.max(1, Math.min(partners.length, os.cpus().length - 1))
+  console.log(`[guide] Running ${partners.length} partners with concurrency=${concurrency}`)
+
+  try {
+    const factories = partners.map((partner, idx) => () => {
+      const { name } = partner
+      const safeEvent = sanitize(manifest.event_name || 'Guide')
+      const safeName  = sanitize(name)
+      const filename  = `${safeEvent} – Guide for ${safeName}.pptx`
+      const pptxPath  = path.join(outDir, filename)
+
+      return runGuideGenerator(
+        manifest,
+        idx,
+        pptxPath,
+        tenLogoPath,
+        (step, pct) => {
+          progress[name] = pct
+          send({ partner: name, pct, step })
+          send({ overall: calcOverall() })
+        }
+      ).then(() => {
+        generatedFiles.push({ path: pptxPath, name: filename })
+      })
+    })
+
+    await runWithPool(factories, concurrency)
+
+    send({ overall: 95, partner: 'all', pct: 95, step: 'Zipping guides…' })
+    await zipFiles(generatedFiles, outputPath)
+
+    for (const f of generatedFiles) {
+      try { fs.unlinkSync(f.path) } catch {}
+    }
+    try { fs.rmdirSync(outDir) } catch {}
+
+    send({ overall: 100, partner: 'all', pct: 100, step: 'Done.' })
+    send({ done: true, outputPath })
+
+    return { success: true, outputPath }
+
+  } catch (err) {
+    try { fs.rmSync(outDir, { recursive: true, force: true }) } catch {}
+    const msg = err instanceof Error ? err.message : String(err)
+    send({ error: `Guide generation failed: ${msg}` })
+    throw new Error(`Guide generation failed: ${msg}`)
+  }
+})
+
 // ── Graph: in-memory cache ───────────────────────────────────────────────────
 
 let _plannerCache  = null   // last PlannerSyncResult

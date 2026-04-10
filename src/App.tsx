@@ -7,11 +7,12 @@ import tenLogo  from './assets/ten-logo-white.png'
 import HomePage      from './components/HomePage'
 import LogisticsPage from './components/LogisticsPage'
 import ReportWizard  from './components/ReportWizard'
+import GuideWizard   from './components/GuideWizard'
 import LoginScreen   from './components/LoginScreen'
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
-export type Page = 'home' | 'logistics' | 'reports'
+export type Page = 'home' | 'logistics' | 'reports' | 'guides'
 
 export interface User {
   name:  string
@@ -144,6 +145,12 @@ export default function App() {
         {page === 'reports' && (
           <motion.div key="reports" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.2 }}>
             <ReportWizard />
+          </motion.div>
+        )}
+
+        {page === 'guides' && (
+          <motion.div key="guides" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.2 }}>
+            <GuideWizard />
           </motion.div>
         )}
       </AnimatePresence>

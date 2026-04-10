@@ -36,9 +36,11 @@ export default function LogisticsPage({ onNavigate }: LogisticsPageProps) {
           <SectionCard
             index={1} id="guides" number="02" title="GUIDES"
             subtitle="Partner & Venue Handbooks"
-            description="Build comprehensive partner guides and venue handbooks with ease. Standardize layouts, auto-fill venue details, and produce print-ready documents that represent TEN at the highest level."
-            tags={['Venue Guides', 'Partner Handbooks', 'Templates', 'Brand-Consistent']}
-            status="planned" statusLabel="Planned" ctaLabel="Coming Soon"
+            description="Build branded partner guides from scratch — no template upload required. Populate schedules, venue details, rules, and personalised intro letters, then export polished handbooks for every partner in one run."
+            tags={['Venue Guides', 'Partner Handbooks', 'No Template', 'Brand-Consistent']}
+            status="active" statusLabel="Active"
+            ctaLabel="Open Guides"
+            onCta={() => onNavigate('guides')}
             previewFit="contain"
             previewImages={[
               './guide-covers/cover-1.jpg',
@@ -65,7 +67,7 @@ export default function LogisticsPage({ onNavigate }: LogisticsPageProps) {
 
         <div className="mt-8 flex items-center justify-between">
           <span className="text-[9px] tracking-[0.22em] uppercase" style={{ color: 'var(--text-3)' }}>
-            1 active — 2 planned
+            2 active — 1 planned
           </span>
           <span className="text-[9px] tracking-[0.22em] uppercase" style={{ color: 'var(--text-3)' }}>
             TEN Document Studio v1.0

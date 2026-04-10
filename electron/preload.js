@@ -45,9 +45,18 @@ contextBridge.exposeInMainWorld('electronAPI', {
    */
   startGenerate: (payload) => ipcRenderer.invoke('generate:start', payload),
 
+  /**
+   * Start batch guide generation (no template upload needed).
+   * Payload: { manifest: GuideManifest, tenLogoPath: string|null, outputPath: string }
+   */
+  startGuideGenerate: (payload) => ipcRenderer.invoke('generate:guide:start', payload),
+
   // ── Progress listeners ───────────────────────────────────────────────────────
   /** Register a callback for generate:progress events. */
   onProgress: (cb) => ipcRenderer.on('generate:progress', (_event, data) => cb(data)),
+
+  /** Register a callback for generate:guide:progress events. */
+  onGuideProgress: (cb) => ipcRenderer.on('generate:guide:progress', (_event, data) => cb(data)),
 
   /** Remove all listeners for a given channel. */
   removeAllListeners: (channel) => ipcRenderer.removeAllListeners(channel),

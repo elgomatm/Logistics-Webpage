@@ -51,6 +51,7 @@ class PhotoEntry:
     path: str = ""          # Absolute server-side path to image file
     pos_x: float = 50.0    # Focal point X, 0–100 (50 = center)
     pos_y: float = 50.0    # Focal point Y, 0–100 (50 = center)
+    zoom: float = 1.0       # Zoom level: 1.0 = cover fit, 2.0 = 2× zoom (max 4.0)
 
 
 @dataclass
@@ -71,7 +72,10 @@ class GuestRow:
 class ReportManifest:
     # ── Identity ──────────────────────────────────────────────────────────
     event_name: str = ""          # e.g. "Lone Star Supercars 2026"
+    event_abbrev: str = ""        # e.g. "LSS 2026" — used in slide footers
     partner_name: str = ""        # e.g. "COTA"
+    partner_logo_path: Optional[str] = None   # Abs path to partner logo PNG
+    include_guests: bool = True   # If False, guest slides are omitted
 
     # ── Intro (Slide 2) ───────────────────────────────────────────────────
     intro_body: str = ""          # Full letter body (multi-paragraph, \n\n separated)
@@ -91,6 +95,7 @@ class ReportManifest:
     # Exactly 5 testimonials to fill the 5 frosted-glass bars.
     # If fewer provided, remaining bars are hidden.
     testimonials: list[Testimonial] = field(default_factory=list)
+    testimonials_bg_path: Optional[str] = None   # Abs path to bg photo for slide 11
 
     # ── Photo galleries ───────────────────────────────────────────────────
     # Up to 3 gallery slides (standard), each with a title + 7 photos.
@@ -102,6 +107,7 @@ class ReportManifest:
     photo_album_url: str = ""
     photo_album_label: str = ""   # Link button text
     social_content_count: str = "0"
+    pixieset_url: str = ""        # "Please click here to view all units" link
     # Up to 10 Instagram preview images
     social_preview_paths: list[str] = field(default_factory=list)
 
@@ -122,6 +128,7 @@ def _parse_photo_entry(p: object) -> "Optional[PhotoEntry]":
             path=p.get("path", "") or "",
             pos_x=float(p.get("pos_x", 50)),
             pos_y=float(p.get("pos_y", 50)),
+            zoom=float(p.get("zoom", 1.0)),
         )
     return None
 
@@ -150,7 +157,10 @@ def manifest_from_dict(d: dict) -> ReportManifest:
 
     return ReportManifest(
         event_name=d.get("event_name", ""),
+        event_abbrev=d.get("event_abbrev", ""),
         partner_name=d.get("partner_name", ""),
+        partner_logo_path=d.get("partner_logo_path") or None,
+        include_guests=bool(d.get("include_guests", True)),
         intro_body=d.get("intro_body", ""),
         overview_text=d.get("overview_text", ""),
         retention_text=d.get("retention_text", ""),
@@ -160,10 +170,12 @@ def manifest_from_dict(d: dict) -> ReportManifest:
         meta_headline=mh,
         meta_posts=posts,
         testimonials=tests,
+        testimonials_bg_path=d.get("testimonials_bg_path") or None,
         gallery_slides=gallery_slides,
         photo_album_url=d.get("photo_album_url", ""),
         photo_album_label=d.get("photo_album_label", f"{d.get('event_name','')} Event Photo Album"),
         social_content_count=str(d.get("social_content_count", "0")),
+        pixieset_url=d.get("pixieset_url", ""),
         social_preview_paths=d.get("social_preview_paths", []),
         guests=gsts,
         output_filename=d.get("output_filename", ""),

@@ -1,20 +1,28 @@
 {
   "name": "ten-document-studio",
-  "version": "0.1.0",
+  "version": "1.0.0",
   "private": true,
+  "description": "TEN Document Studio — Partner Report Generator",
+  "author": "The Exotics Network",
+  "main": "electron/main.js",
   "scripts": {
-    "dev": "next dev",
-    "build": "next build",
-    "start": "next start",
-    "lint": "next lint"
+    "dev": "concurrently \"vite\" \"wait-on http://localhost:5173 && electron .\"",
+    "dev:web": "vite",
+    "build": "vite build && electron-builder build --mac --config electron-builder.config.js",
+    "build:web": "vite build",
+    "pack": "vite build && electron-builder --dir",
+    "lint": "eslint src --ext .ts,.tsx",
+    "_comment_legacy": "Legacy Next.js scripts kept for reference:",
+    "next:dev": "next dev",
+    "next:build": "next build",
+    "next:start": "next start"
   },
   "dependencies": {
+    "@azure/msal-node": "^5.1.2",
     "@types/archiver": "^7.0.0",
     "archiver": "^7.0.1",
     "framer-motion": "^11.1.9",
     "lucide-react": "^0.383.0",
-    "next": "14.2.35",
-    "next-auth": "^5.0.0-beta.30",
     "react": "^18",
     "react-dom": "^18"
   },
@@ -22,9 +30,15 @@
     "@types/node": "^20",
     "@types/react": "^18",
     "@types/react-dom": "^18",
+    "@vitejs/plugin-react": "^4.7.0",
     "autoprefixer": "^10.0.1",
+    "concurrently": "^9.2.1",
+    "electron": "^34.0.0",
+    "electron-builder": "^26.8.1",
     "postcss": "^8",
     "tailwindcss": "^3.4.3",
-    "typescript": "^6.0.2"
+    "typescript": "^5.4.5",
+    "vite": "^5.4.21",
+    "wait-on": "^9.0.4"
   }
 }

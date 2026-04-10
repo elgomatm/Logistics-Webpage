@@ -178,6 +178,73 @@ def _next_shape_id(slide_xml: str) -> int:
     return max(ids, default=0) + 1
 
 
+def _subtitle_sp_xml(shape_id: int, partner_name: str) -> str:
+    """
+    Black full-width subtitle bar near the bottom of the cover slide.
+
+    Layout (8.5 × 11 in slide):
+      x=0, y≈81.5 % of slide height, full slide width, height≈8 %
+      → matches the baked-in subtitle position in the existing template.
+
+    Typography:
+      Font  : Molde-SemiExpanded Bold
+      Size  : 28 pt start; <a:normAutofit/> lets PowerPoint shrink automatically
+              when the partner name is long.
+      Color : White (#FFFFFF) on solid black fill
+      Align : Centered, both lines
+    """
+    y  = int(SLIDE_H * 0.815)   # 81.5 % from top
+    cy = int(SLIDE_H * 0.080)   # 8 % tall
+
+    line1 = "OFFICIAL EVENT REPORT"
+    line2 = f"PREPARED FOR: {partner_name.upper()}"
+
+    def _run(text: str) -> str:
+        return (
+            f'<a:r>'
+            f'<a:rPr lang="en-US" sz="2800" b="1" dirty="0">'
+            f'<a:latin typeface="Molde-SemiExpanded Bold"/>'
+            f'<a:solidFill><a:srgbClr val="FFFFFF"/></a:solidFill>'
+            f'</a:rPr>'
+            f'<a:t>{text}</a:t>'
+            f'</a:r>'
+        )
+
+    def _para(text: str) -> str:
+        return (
+            f'<a:p>'
+            f'<a:pPr algn="ctr">'
+            f'<a:spcBef><a:spcPts val="0"/></a:spcBef>'
+            f'<a:spcAft><a:spcPts val="0"/></a:spcAft>'
+            f'</a:pPr>'
+            + _run(text) +
+            f'</a:p>'
+        )
+
+    return (
+        f'<p:sp>'
+        f'<p:nvSpPr>'
+        f'<p:cNvPr id="{shape_id}" name="CoverSubtitle"/>'
+        f'<p:cNvSpPr txBox="1"/>'
+        f'<p:nvPr/>'
+        f'</p:nvSpPr>'
+        f'<p:spPr>'
+        f'<a:xfrm><a:off x="0" y="{y}"/><a:ext cx="{SLIDE_W}" cy="{cy}"/></a:xfrm>'
+        f'<a:prstGeom prst="rect"><a:avLst/></a:prstGeom>'
+        f'<a:solidFill><a:srgbClr val="000000"/></a:solidFill>'
+        f'</p:spPr>'
+        f'<p:txBody>'
+        f'<a:bodyPr lIns="457200" rIns="457200" tIns="91440" bIns="91440" anchor="ctr">'
+        f'<a:normAutofit/>'
+        f'</a:bodyPr>'
+        f'<a:lstStyle/>'
+        + _para(line1)
+        + _para(line2) +
+        f'</p:txBody>'
+        f'</p:sp>'
+    )
+
+
 def _title_pic_xml(shape_id: int, r_id: str, left: int, top: int,
                    cx: int, cy: int) -> str:
     return (
@@ -205,6 +272,7 @@ def edit(
     unpacked_dir: str,
     cover_photo_path: str | None,
     title_png_path: str | None,
+    partner_name: str = "",
 ) -> None:
     """
     Edit slide 1 in an unpacked PPTX directory.
@@ -215,6 +283,9 @@ def edit(
                           None = leave existing background unchanged.
         title_png_path:   Absolute path to event title PNG.
                           None = skip title injection.
+        partner_name:     Partner name for the subtitle bar
+                          ("OFFICIAL EVENT REPORT / PREPARED FOR: <name>").
+                          Empty string = skip subtitle injection.
     """
     slide_xml_path = os.path.join(unpacked_dir, "ppt", "slides", "slide1.xml")
     rels_path      = os.path.join(unpacked_dir, "ppt", "slides", "_rels", "slide1.xml.rels")
@@ -287,6 +358,12 @@ def edit(
         shape_id  = _next_shape_id(slide_xml)
         pic_xml   = _title_pic_xml(shape_id, title_rid, left, top, cx, cy)
         slide_xml = slide_xml.replace("</p:spTree>", pic_xml + "</p:spTree>")
+
+    # ── 3. Inject subtitle bar ─────────────────────────────────────────────────
+    if partner_name:
+        shape_id   = _next_shape_id(slide_xml)
+        sub_xml    = _subtitle_sp_xml(shape_id, partner_name)
+        slide_xml  = slide_xml.replace("</p:spTree>", sub_xml + "</p:spTree>")
 
     # ── Write back ─────────────────────────────────────────────────────────────
     with open(slide_xml_path, "w", encoding="utf-8") as f:

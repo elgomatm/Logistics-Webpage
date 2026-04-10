@@ -1,5 +1,5 @@
 """
-Photo gallery slides (slides 12–14 in template = user slides 1–3).
+Photo gallery slides.
 
 Standard: 3 gallery slides, each with exactly 7 photo placeholders.
 
@@ -23,19 +23,33 @@ import shutil
 import struct
 from pathlib import Path
 from typing import Optional
+
+try:
+    from PIL import Image as _PILImage  # type: ignore
+    _PIL_AVAILABLE = True
+except ImportError:
+    _PILImage = None           # type: ignore
+    _PIL_AVAILABLE = False
+
+_EMU_PER_INCH = 914_400
+_INJECT_DPI   = 220          # target DPI when pre-resizing gallery photos
 from ..manifest import ReportManifest, GallerySlide, PhotoEntry
 from ..xml_utils import (
     read_slide, write_slide, read_rels, write_rels,
     set_footer_text, update_rel_target, MASTER_PH_IDX,
+    find_slides_by_content, find_slides_by_layout,
 )
 
 # ── Constants ──────────────────────────────────────────────────────────────────
 
-# Template slides used for gallery (in order)
-GALLERY_SLIDE_NAMES = ["slide12.xml", "slide13.xml", "slide14.xml"]
+# PRIMARY: gallery slides have a "Text Placeholder 7" title shape + photo slot idx=20.
+# FALLBACK: gallery slides are the ONLY slides that use slideLayout3.
+_DETECT_PATTERNS  = ('name="Text Placeholder 7"', 'idx="20"')
+_FALLBACK_LAYOUT  = "slideLayout3"
 
-# Extra template gallery slides — deleted from output if not needed
-GALLERY_EXTRA_SLIDES = ["slide15.xml", "slide16.xml", "slide17.xml", "slide18.xml"]
+# Maximum number of gallery slides to keep (active slots for user photos).
+# Any additional gallery slides found beyond this are treated as extras and deleted.
+_MAX_GALLERY_SLIDES = 3
 
 # The 7 slot placeholder indices, in UI/manifest order (L1 L2 L3 L4 R1 R2 R3)
 SLOT_INDICES = ["20", "26", "27", "28", "17", "29", "30"]
@@ -106,32 +120,39 @@ def _calc_src_rect(
     img_w: int, img_h: int,
     ph_cx: int, ph_cy: int,
     pos_x: float, pos_y: float,
+    zoom: float = 1.0,
 ) -> dict[str, int]:
     """
-    Compute OOXML srcRect values (0–100000) for a cover-crop with focal point.
+    Compute OOXML srcRect values (0–100000) for a cover-crop with focal point
+    and optional zoom.
 
     pos_x / pos_y: 0=left/top, 50=center, 100=right/bottom (0–100 range).
+    zoom: 1.0 = no zoom (standard cover-fit), 2.0 = show half the area, etc.
     Returns dict with keys l, t, r, b — units: thousandths of a percent.
+
+    At zoom > 1 the visible window in the scaled image shrinks to ph_cx/zoom ×
+    ph_cy/zoom, centred on the focal point, so the crop is tighter.
     """
     ph_ar  = ph_cx / ph_cy if ph_cy else 1.0
     img_ar = img_w / img_h if img_h else 1.0
+    zoom   = max(1.0, zoom)
 
+    # Scale image to cover-fit the placeholder
     if img_ar >= ph_ar:
-        # Image wider → scale to fill height, crop sides
-        scale   = ph_cy / img_h
-        sc_w    = img_w * scale        # scaled image width
-        sc_h    = ph_cy               # exact match
-        excess_w = sc_w - ph_cx
-        excess_h = 0.0
+        scale = ph_cy / img_h
     else:
-        # Image taller → scale to fill width, crop top/bottom
-        scale   = ph_cx / img_w
-        sc_w    = ph_cx
-        sc_h    = img_h * scale
-        excess_w = 0.0
-        excess_h = sc_h - ph_cy
+        scale = ph_cx / img_w
+    sc_w = img_w * scale
+    sc_h = img_h * scale
 
-    focal_x = pos_x / 100.0   # 0.0 – 1.0
+    # Visible window at this zoom level (smaller = more zoomed)
+    vis_w = ph_cx / zoom
+    vis_h = ph_cy / zoom
+
+    excess_w = max(0.0, sc_w - vis_w)
+    excess_h = max(0.0, sc_h - vis_h)
+
+    focal_x = pos_x / 100.0
     focal_y = pos_y / 100.0
 
     left_px  = focal_x * excess_w
@@ -179,19 +200,24 @@ def _set_blip_fill_src_rect(xml: str, rid: str, src_rect: dict[str, int]) -> str
     """
     Within the p:pic that has r:embed="<rid>", update its a:blipFill to include
     the given srcRect (replacing any existing one).
+
+    If all values are zero the existing srcRect is removed and no new one is
+    written (the image fills the placeholder without any crop offset).
     """
-    src_tag = (
-        f'<a:srcRect l="{src_rect["l"]}" t="{src_rect["t"]}" '
-        f'r="{src_rect["r"]}" b="{src_rect["b"]}"/>'
-    )
+    all_zero = all(v == 0 for v in src_rect.values())
 
     def replacer(m: re.Match) -> str:
         block = m.group(0)
         if f'r:embed="{rid}"' not in block:
             return block
-        # Remove existing srcRect if any
+        # Always remove any existing srcRect
         inner = re.sub(r"<a:srcRect[^/]*/>\s*", "", block)
-        # Insert after <a:blip …/>
+        if all_zero:
+            return inner  # pre-cropped image: no srcRect needed
+        src_tag = (
+            f'<a:srcRect l="{src_rect["l"]}" t="{src_rect["t"]}" '
+            f'r="{src_rect["r"]}" b="{src_rect["b"]}"/>'
+        )
         inner = re.sub(
             r"(<a:blip[^/]*/>\s*)",
             rf"\1{src_tag}",
@@ -254,6 +280,14 @@ def _inject_photo(
 ) -> tuple[str, str]:
     """
     Inject one photo into the slot with placeholder idx.
+
+    When Pillow is available the photo is pre-cropped to the slot's aspect ratio
+    (around the user's focal point) and pre-resized to _INJECT_DPI display
+    resolution before being written to the media directory.  This bakes in the
+    crop so no <a:srcRect> is needed in the PPTX XML, and the stored image is
+    already at display size — eliminating most of the work _compress_images
+    would otherwise do for gallery photos.
+
     Returns updated (xml, rels).
     """
     if not photo.path or not os.path.exists(photo.path):
@@ -274,27 +308,85 @@ def _inject_photo(
         return xml, rels
     existing_name = target_m.group(1)
 
-    # Copy new photo into media dir — keep original extension, reuse slot name stem
     stem      = os.path.splitext(existing_name)[0]
     src_ext   = Path(photo.path).suffix.lower()
     new_name  = f"{stem}{src_ext}"
     dest_path = os.path.join(media_dir, new_name)
-    shutil.copy2(photo.path, dest_path)
 
-    # Update rels target
+    ph_cx, ph_cy = SLOT_DIMS.get(idx, (3_328_416, 1_819_656))
+    zoom  = max(1.0, getattr(photo, "zoom", 1.0))
+    src_rect: dict[str, int] | None = None   # None → use fallback path
+
+    if _PIL_AVAILABLE:
+        try:
+            img = _PILImage.open(photo.path)
+            img_w, img_h = img.size
+
+            focal_x = photo.pos_x / 100.0   # 0.0–1.0
+            focal_y = photo.pos_y / 100.0
+
+            ph_ar  = ph_cx / ph_cy
+            img_ar = img_w / img_h
+
+            # Compute scale for cover-fit (same as CSS objectFit: cover)
+            scale = max(ph_cx / img_w, ph_cy / img_h)
+            sc_w = img_w * scale
+            sc_h = img_h * scale
+
+            # Visible window in scaled-image coordinates at this zoom level
+            vis_w_sc = ph_cx / zoom
+            vis_h_sc = ph_cy / zoom
+
+            excess_w_sc = max(0.0, sc_w - vis_w_sc)
+            excess_h_sc = max(0.0, sc_h - vis_h_sc)
+
+            # Convert visible window back to original-image coordinates for PIL crop
+            left_orig = (focal_x * excess_w_sc) / scale
+            top_orig  = (focal_y * excess_h_sc) / scale
+            right_orig = left_orig + vis_w_sc / scale
+            bot_orig   = top_orig  + vis_h_sc / scale
+
+            left_orig  = max(0, min(int(left_orig),  img_w))
+            top_orig   = max(0, min(int(top_orig),   img_h))
+            right_orig = max(left_orig + 1, min(int(right_orig), img_w))
+            bot_orig   = max(top_orig  + 1, min(int(bot_orig),   img_h))
+
+            img = img.crop((left_orig, top_orig, right_orig, bot_orig))
+
+            # ── Resize to display resolution (_INJECT_DPI) ───────────────
+            t_w = max(1, int(ph_cx / _EMU_PER_INCH * _INJECT_DPI))
+            t_h = max(1, int(ph_cy / _EMU_PER_INCH * _INJECT_DPI))
+            if img.width > t_w or img.height > t_h:
+                img = img.resize((t_w, t_h), _PILImage.LANCZOS)
+
+            # ── Save ────────────────────────────────────────────────────
+            save_fmt = "JPEG" if src_ext in (".jpg", ".jpeg") else "PNG"
+            if save_fmt == "JPEG" and img.mode in ("RGBA", "P"):
+                img = img.convert("RGB")
+            save_kw: dict = {"quality": 88} if save_fmt == "JPEG" else {}
+            img.save(dest_path, format=save_fmt, **save_kw)
+
+            # Crop is baked in — no srcRect needed in the PPTX XML
+            src_rect = {"l": 0, "t": 0, "r": 0, "b": 0}
+
+        except Exception:
+            src_rect = None   # fall through to legacy path
+
+    if src_rect is None:
+        # PIL unavailable or failed — copy original and compute srcRect via OOXML
+        shutil.copy2(photo.path, dest_path)
+        try:
+            img_w, img_h = _image_dimensions(photo.path)
+            src_rect = _calc_src_rect(img_w, img_h, ph_cx, ph_cy,
+                                       photo.pos_x, photo.pos_y, zoom=zoom)
+        except Exception:
+            src_rect = {"l": 0, "t": 0, "r": 0, "b": 0}
+
+    # Update rels target if extension changed
     if new_name != existing_name:
         rels = update_rel_target(rels, rid, f"../media/{new_name}")
 
-    # Compute srcRect from image dims + focal point
-    try:
-        img_w, img_h = _image_dimensions(photo.path)
-        ph_cx, ph_cy = SLOT_DIMS.get(idx, (3_328_416, 1_819_656))
-        src_rect = _calc_src_rect(img_w, img_h, ph_cx, ph_cy,
-                                   photo.pos_x, photo.pos_y)
-    except Exception:
-        src_rect = {"l": 0, "t": 0, "r": 0, "b": 0}
-
-    # Inject srcRect into blipFill
+    # Inject srcRect into blipFill (zero srcRect removes any existing crop tag)
     xml = _set_blip_fill_src_rect(xml, rid, src_rect)
 
     return xml, rels
@@ -309,20 +401,32 @@ def edit(
     """
     Edit gallery slides.
 
-    Uses template slides 12, 13, 14 (index 0–2).
-    Extra template slides 15–18 are returned in the delete list.
+    Gallery slides are detected by content signature (Text Placeholder 7 + idx=20),
+    so this works regardless of how the template slides are numbered.
+    The first _MAX_GALLERY_SLIDES (3) detected slides are used for user photos;
+    any additional gallery slides found in the template are deleted.
 
     Returns:
         kept:   list of slide filenames kept (e.g. ["slide12.xml", ...])
         delete: list of slide filenames to remove from presentation
     """
-    footer  = f"{manifest.event_name} Official Event Report - For {manifest.partner_name}"
+    footer  = f"{manifest.event_abbrev or manifest.event_name} Official Event Report – Prepared For {manifest.partner_name}"
     slides  = manifest.gallery_slides  # user-provided, up to 3
 
-    kept:   list[str] = []
-    delete: list[str] = list(GALLERY_EXTRA_SLIDES)  # always remove extras
+    # Locate all gallery slides in the template
+    # PRIMARY: "Text Placeholder 7" title shape + photo slot idx="20"
+    all_gallery = find_slides_by_content(unpacked_dir, *_DETECT_PATTERNS)
+    if not all_gallery:
+        # FALLBACK: only gallery slides use slideLayout3
+        all_gallery = find_slides_by_layout(unpacked_dir, _FALLBACK_LAYOUT)
 
-    for i, tmpl_slide in enumerate(GALLERY_SLIDE_NAMES):
+    gallery_slide_names  = all_gallery[:_MAX_GALLERY_SLIDES]
+    extra_gallery_slides = all_gallery[_MAX_GALLERY_SLIDES:]
+
+    kept:   list[str] = []
+    delete: list[str] = list(extra_gallery_slides)  # extra slides always removed
+
+    for i, tmpl_slide in enumerate(gallery_slide_names):
         if i >= len(slides):
             # No user slide for this template slot → delete it
             delete.append(tmpl_slide)

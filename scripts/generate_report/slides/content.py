@@ -17,9 +17,13 @@ from ..xml_utils import (
     replace_run_text, find_shape_by_name, replace_txbody_content,
     build_paragraph, build_empty_paragraph,
     read_rels, write_rels, add_image_rel, next_rId,
+    find_slide_by_content,
 )
 
-SLIDE = "slide19.xml"
+# PRIMARY: the "Content Creation" slide has a rounded rectangle hyperlink button.
+# FALLBACK: "Content creation" appears as a text run in the slide's section label.
+_DETECT_PATTERNS = ('name="Rounded Rectangle 19"',)
+_FALLBACK_TEXT   = ("Content creation",)
 
 # Type URI for hyperlinks in rels
 _HYPERLINK_TYPE = (
@@ -85,10 +89,22 @@ def _inject_hyperlink_url(unpacked_dir: str, slide_name: str,
 
 
 def edit(unpacked_dir: str, manifest: ReportManifest) -> None:
-    xml = read_slide(unpacked_dir, SLIDE)
+    # ── Locate the content creation slide ───────────────────────────────
+    # PRIMARY: rounded rectangle shape name
+    slide = find_slide_by_content(unpacked_dir, *_DETECT_PATTERNS)
+    if slide is None:
+        # FALLBACK: "Content creation" section label text
+        slide = find_slide_by_content(unpacked_dir, *_FALLBACK_TEXT)
+    if slide is None:
+        raise FileNotFoundError(
+            "Content creation slide not found in template — "
+            'expected a slide with "Rounded Rectangle 19" shape or "Content creation" text'
+        )
+
+    xml = read_slide(unpacked_dir, slide)
 
     # ── Footer ──────────────────────────────────────────────────────────
-    footer = f"{manifest.event_name} Official Event Report - For {manifest.partner_name}"
+    footer = f"{manifest.event_abbrev or manifest.event_name} Official Event Report – Prepared For {manifest.partner_name}"
     xml = set_footer_text(xml, footer)
 
     # ── TextBox 7: Photo albums section ─────────────────────────────────
@@ -145,10 +161,16 @@ def edit(unpacked_dir: str, manifest: ReportManifest) -> None:
         )
         xml = xml[:s] + new_shape + xml[e:]
 
-    write_slide(unpacked_dir, SLIDE, xml)
+    write_slide(unpacked_dir, slide, xml)
 
     # ── Inject actual hyperlink URL into rels ────────────────────────────
     if manifest.photo_album_url:
         _inject_hyperlink_url(
-            unpacked_dir, SLIDE, "Rounded Rectangle 19", manifest.photo_album_url
+            unpacked_dir, slide, "Rounded Rectangle 19", manifest.photo_album_url
+        )
+
+    # ── Inject Pixieset URL into "Please click here" text (TextBox 8) ────
+    if manifest.pixieset_url:
+        _inject_hyperlink_url(
+            unpacked_dir, slide, "TextBox 8", manifest.pixieset_url
         )

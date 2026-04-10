@@ -15,9 +15,13 @@ from ..xml_utils import (
     read_slide, write_slide, set_footer_text,
     replace_run_text, find_shape_by_name, replace_txbody_content,
     build_paragraph, build_empty_paragraph,
+    find_slide_by_content,
 )
 
-SLIDE = "slide3.xml"
+# PRIMARY: shape names unique to the overview slide (four stat callout boxes).
+# FALLBACK: "EVENT OVERVIEW" appears as a single text run on the overview slide.
+_DETECT_PATTERNS = ('name="TextBox 31"', 'name="TextBox 29"', 'name="TextBox 27"')
+_FALLBACK_TEXT   = ("EVENT OVERVIEW",)
 
 # Stat shape names and their stat field names
 _STATS = [
@@ -47,10 +51,22 @@ def _build_section(heading: str, body: str) -> str:
 
 
 def edit(unpacked_dir: str, manifest: ReportManifest) -> None:
-    xml = read_slide(unpacked_dir, SLIDE)
+    # ── Locate the overview slide ────────────────────────────────────────
+    # PRIMARY: shape names
+    slide = find_slide_by_content(unpacked_dir, *_DETECT_PATTERNS)
+    if slide is None:
+        # FALLBACK: "EVENT OVERVIEW" label text
+        slide = find_slide_by_content(unpacked_dir, *_FALLBACK_TEXT)
+    if slide is None:
+        raise FileNotFoundError(
+            "Overview slide not found in template — "
+            'expected a slide with TextBox 31/29/27 shapes or "EVENT OVERVIEW" text'
+        )
+
+    xml = read_slide(unpacked_dir, slide)
 
     # ── Footer ──────────────────────────────────────────────────────────
-    footer_text = f"{manifest.event_name} Official Event Report - For {manifest.partner_name}"
+    footer_text = f"{manifest.event_abbrev or manifest.event_name} Official Event Report – Prepared For {manifest.partner_name}"
     xml = set_footer_text(xml, footer_text)
 
     # ── Section header bar ───────────────────────────────────────────────
@@ -88,4 +104,4 @@ def edit(unpacked_dir: str, manifest: ReportManifest) -> None:
             new_shape = replace_txbody_content(shape_xml, paras_xml)
             xml = xml[:start] + new_shape + xml[end:]
 
-    write_slide(unpacked_dir, SLIDE, xml)
+    write_slide(unpacked_dir, slide, xml)

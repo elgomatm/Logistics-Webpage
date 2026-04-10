@@ -26,12 +26,22 @@ from ..xml_utils import (
     replace_run_text, find_shape_by_name, replace_txbody_content,
     build_paragraph, build_empty_paragraph,
     read_rels, write_rels,
+    find_slides_by_content,
 )
 
-# Template slide numbers for the digital campaign section
-CAMPAIGN_SLIDES = ["slide4.xml", "slide5.xml", "slide6.xml",
-                   "slide7.xml", "slide8.xml", "slide9.xml", "slide10.xml"]
-ROWS_PER_TABLE  = 14
+# ── Detection signatures (tried in order until one matches) ───────────────────
+#
+# PRIMARY — stable shape names set by the template author:
+#   First slide uses "Table 1", continuation slides use "Table 4".
+# FALLBACK — section-label text present on every digital slide:
+#   All digital slides contain the string "DIGITAL CAMPAIGN" as a contiguous run.
+#   The first found (by slide number) is treated as the header slide.
+#
+_DETECT_FIRST  = ('name="Table 1"',)   # header slide
+_DETECT_CONTIN = ('name="Table 4"',)   # continuation slides
+_FALLBACK_ALL  = ("DIGITAL CAMPAIGN",) # appears on ALL digital slides
+
+ROWS_PER_TABLE = 14
 
 # Table column widths in EMU from template slide4 (7 data cols + 1 name col)
 # We preserve the existing table XML and only update cell text.
@@ -135,14 +145,36 @@ def edit(unpacked_dir: str, manifest: ReportManifest,
          presentation_xml_path: str) -> list[str]:
     """
     Edit all digital campaign slides.
-    Returns list of slide filenames that were kept (others should be deleted).
+    Returns (kept_slides, delete_slides) — lists of slide filenames.
+
+    Slides are detected by the presence of "Content Name" in their table headers,
+    so this works regardless of how the template slides are numbered.
     """
     posts = manifest.meta_posts
-    footer = f"{manifest.event_name} Official Event Report - For {manifest.partner_name}"
+    footer = f"{manifest.event_abbrev or manifest.event_name} Official Event Report – Prepared For {manifest.partner_name}"
 
-    # How many table slides do we need?
-    # Slide 4 holds the header + first batch of posts
-    # Subsequent slides hold ROWS_PER_TABLE each
+    # ── Locate all digital campaign slides ───────────────────────────────
+    # PRIMARY: shape names ("Table 1" for header, "Table 4" for continuations)
+    first_slides  = find_slides_by_content(unpacked_dir, *_DETECT_FIRST)
+    contin_slides = find_slides_by_content(unpacked_dir, *_DETECT_CONTIN)
+
+    if not first_slides:
+        # FALLBACK: find all slides containing the "DIGITAL CAMPAIGN" section label.
+        # Sort by slide number; the first is the header, the rest are continuations.
+        all_digital = find_slides_by_content(unpacked_dir, *_FALLBACK_ALL)
+        first_slides  = all_digital[:1]
+        contin_slides = all_digital[1:]
+
+    if not first_slides:
+        raise FileNotFoundError(
+            "Digital campaign slides not found in template — "
+            'expected slides with shape "Table 1"/"Table 4" or text "DIGITAL CAMPAIGN"'
+        )
+
+    # Build the full ordered list: header slide first, then continuations in order
+    campaign_slides = first_slides[:1] + contin_slides
+
+    # How many slides do we need?
     if not posts:
         chunks = [[]]
     else:
@@ -151,15 +183,16 @@ def edit(unpacked_dir: str, manifest: ReportManifest,
         if not chunks:
             chunks = [[]]
 
-    needed = len(chunks)
-    available = len(CAMPAIGN_SLIDES)
+    needed    = len(chunks)
+    available = len(campaign_slides)
 
-    kept_slides = CAMPAIGN_SLIDES[:min(needed, available)]
-    delete_slides = CAMPAIGN_SLIDES[min(needed, available):]
+    kept_slides   = campaign_slides[:min(needed, available)]
+    delete_slides = campaign_slides[min(needed, available):]
 
-    # ── Edit slide 4 (first page with header + metrics) ──────────────────
-    slide4 = read_slide(unpacked_dir, "slide4.xml")
-    slide4 = set_footer_text(slide4, footer)
+    # ── First digital slide (header + KPI metrics + first table page) ─────
+    first_slide_name = campaign_slides[0]
+    first_slide = read_slide(unpacked_dir, first_slide_name)
+    first_slide = set_footer_text(first_slide, footer)
 
     # Replace KPI callouts
     kpi_map = {
@@ -173,7 +206,7 @@ def edit(unpacked_dir: str, manifest: ReportManifest,
     for shape_name, value in kpi_map.items():
         if not value:
             continue
-        result = find_shape_by_name(slide4, shape_name)
+        result = find_shape_by_name(first_slide, shape_name)
         if result:
             shape_xml, start, end = result
             runs = re.findall(r"<a:t>([^<]*)</a:t>", shape_xml)
@@ -181,27 +214,27 @@ def edit(unpacked_dir: str, manifest: ReportManifest,
                 first = runs[0]
                 new_shape = shape_xml.replace(f"<a:t>{first}</a:t>",
                                                f"<a:t>{value}</a:t>", 1)
-                slide4 = slide4[:start] + new_shape + slide4[end:]
+                first_slide = first_slide[:start] + new_shape + first_slide[end:]
 
     # Campaign subtitle / description
     if manifest.campaign_subtitle:
-        slide4 = replace_run_text(slide4,
+        first_slide = replace_run_text(first_slide,
             "TEN\u2019S LARGEST DIGITAL CAMPAIGN YET",
             manifest.campaign_subtitle)
     if manifest.campaign_description:
-        slide4 = replace_run_text(slide4,
+        first_slide = replace_run_text(first_slide,
             "The following analytics represent the aggregate metrics across all "
             "event-related posts from the official TEN Instagram, Facebook, and "
             "TikTok accounts, TEN\u2019s largest campaign to date!",
             manifest.campaign_description)
 
-    # Replace table rows
+    # Replace table rows on the first slide
     is_last = (needed == 1)
-    slide4 = _replace_table_rows(slide4, chunks[0], include_totals=is_last)
-    write_slide(unpacked_dir, "slide4.xml", slide4)
+    first_slide = _replace_table_rows(first_slide, chunks[0], include_totals=is_last)
+    write_slide(unpacked_dir, first_slide_name, first_slide)
 
     # ── Edit continuation slides ──────────────────────────────────────────
-    for i, slide_name in enumerate(CAMPAIGN_SLIDES[1:], start=1):
+    for i, slide_name in enumerate(campaign_slides[1:], start=1):
         if i >= needed:
             break   # This slide will be deleted
         chunk = chunks[i]

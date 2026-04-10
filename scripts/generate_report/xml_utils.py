@@ -253,6 +253,140 @@ def next_rId(rels_xml: str) -> str:
 
 # ── File I/O ──────────────────────────────────────────────────────────────
 
+def slide_exists(unpacked_dir: str, slide_name: str) -> bool:
+    """Return True if the slide XML file exists in the unpacked template."""
+    return os.path.isfile(os.path.join(unpacked_dir, "ppt", "slides", slide_name))
+
+
+# ── Slide XML cache ───────────────────────────────────────────────────────────
+#
+# Populated once after unpacking (warm_slide_cache), then used read-only during
+# all slide-editing and detection calls.  This converts N×8 disk reads (each
+# editor scanning every slide) into a single up-front N reads.
+#
+# NOT thread-safe for writes; always populate before spawning worker threads.
+
+_slide_xml_cache: dict[str, dict[str, str]] = {}   # unpacked_dir → {slide_name → xml}
+
+
+def warm_slide_cache(unpacked_dir: str) -> None:
+    """Pre-read all slide XMLs into memory.  Call once right after unpack()."""
+    cache: dict[str, str] = {}
+    for name in _all_slide_names(unpacked_dir):
+        path = os.path.join(unpacked_dir, "ppt", "slides", name)
+        try:
+            with open(path, encoding="utf-8") as fh:
+                cache[name] = fh.read()
+        except OSError:
+            pass
+    _slide_xml_cache[unpacked_dir] = cache
+
+
+def clear_slide_cache(unpacked_dir: str) -> None:
+    """Release the in-memory cache for unpacked_dir (free memory)."""
+    _slide_xml_cache.pop(unpacked_dir, None)
+
+
+# ── Content-based slide discovery ────────────────────────────────────────────
+
+def _all_slide_names(unpacked_dir: str) -> list[str]:
+    """Return all slide XML filenames in the template, sorted numerically."""
+    slides_dir = os.path.join(unpacked_dir, "ppt", "slides")
+    names = [
+        f for f in os.listdir(slides_dir)
+        if f.startswith("slide") and f.endswith(".xml")
+        and not f.startswith("slideLayout")
+        and not f.startswith("slideMaster")
+    ]
+
+    def _num(n: str) -> int:
+        m = re.search(r"\d+", n)
+        return int(m.group()) if m else 0
+
+    return sorted(names, key=_num)
+
+
+def find_slide_by_content(unpacked_dir: str, *patterns: str) -> str | None:
+    """
+    Return the filename of the first slide (in numeric order) whose raw XML
+    contains ALL of the given substrings.
+
+    Uses the in-memory cache populated by warm_slide_cache() when available,
+    falling back to disk reads.  Returns None if no slide matches.
+    """
+    cache = _slide_xml_cache.get(unpacked_dir, {})
+    for name in _all_slide_names(unpacked_dir):
+        try:
+            xml = cache[name] if name in cache else read_slide(unpacked_dir, name)
+        except OSError:
+            continue
+        if all(p in xml for p in patterns):
+            return name
+    return None
+
+
+def find_slides_by_content(unpacked_dir: str, *patterns: str) -> list[str]:
+    """
+    Return filenames of ALL slides (in numeric order) whose raw XML contains
+    ALL of the given substrings.
+
+    Uses the in-memory cache populated by warm_slide_cache() when available.
+    """
+    cache = _slide_xml_cache.get(unpacked_dir, {})
+    result: list[str] = []
+    for name in _all_slide_names(unpacked_dir):
+        try:
+            xml = cache[name] if name in cache else read_slide(unpacked_dir, name)
+        except OSError:
+            continue
+        if all(p in xml for p in patterns):
+            result.append(name)
+    return result
+
+
+def find_slide_by_layout(unpacked_dir: str, layout_name: str) -> str | None:
+    """
+    Return the first slide (in numeric order) whose rels file references the
+    given slide layout filename fragment (e.g. 'slideLayout4').
+
+    This is useful as a fallback when shape-name-based detection fails — slide
+    layouts are assigned per-slide-type and are preserved even after PowerPoint
+    renumbers the presentation.
+    """
+    for name in _all_slide_names(unpacked_dir):
+        rels_path = os.path.join(
+            unpacked_dir, "ppt", "slides", "_rels", f"{name}.rels"
+        )
+        try:
+            with open(rels_path, encoding="utf-8") as f:
+                rels = f.read()
+        except OSError:
+            continue
+        if layout_name in rels:
+            return name
+    return None
+
+
+def find_slides_by_layout(unpacked_dir: str, layout_name: str) -> list[str]:
+    """
+    Return all slide filenames (in numeric order) whose rels file references
+    the given slide layout filename fragment.
+    """
+    result: list[str] = []
+    for name in _all_slide_names(unpacked_dir):
+        rels_path = os.path.join(
+            unpacked_dir, "ppt", "slides", "_rels", f"{name}.rels"
+        )
+        try:
+            with open(rels_path, encoding="utf-8") as f:
+                rels = f.read()
+        except OSError:
+            continue
+        if layout_name in rels:
+            result.append(name)
+    return result
+
+
 def read_slide(unpacked_dir: str, slide_name: str) -> str:
     path = os.path.join(unpacked_dir, "ppt", "slides", slide_name)
     with open(path, "r", encoding="utf-8") as f:
@@ -268,6 +402,8 @@ def write_slide(unpacked_dir: str, slide_name: str, xml: str) -> None:
 def read_rels(unpacked_dir: str, slide_name: str) -> str:
     path = os.path.join(unpacked_dir, "ppt", "slides", "_rels",
                         slide_name + ".rels")
+    if not os.path.isfile(path):
+        return '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"></Relationships>'
     with open(path, "r", encoding="utf-8") as f:
         return f.read()
 

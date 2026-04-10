@@ -11,10 +11,15 @@ import os
 from ..manifest import ReportManifest, GuestRow
 from ..xml_utils import (
     read_slide, write_slide, set_footer_text, find_shape_by_name,
+    find_slides_by_content,
 )
 
-GUEST_SLIDES   = [f"slide{n}.xml" for n in range(20, 27)]  # slide20–slide26
-ROWS_PER_PAGE  = 15
+# PRIMARY: guest slides use a table named "Table 3" containing "Full Name".
+# FALLBACK: "GUEST DATA" appears as a single text run on every guest slide.
+_DETECT_PATTERNS = ('name="Table 3"', "Full Name")
+_FALLBACK_TEXT   = ("GUEST DATA",)
+
+ROWS_PER_PAGE = 15
 
 
 def _replace_guest_table(xml: str, rows: list[GuestRow]) -> str:
@@ -58,9 +63,24 @@ def edit(unpacked_dir: str, manifest: ReportManifest) -> tuple[list[str], list[s
     """
     Edit guest data slides.
     Returns (kept_slides, delete_slides).
+    If manifest.include_guests is False, all guest slides are deleted.
+
+    Slides are detected by the presence of "Full Name" and "Exotic Car" in their
+    table headers, so this works regardless of how the template slides are numbered.
     """
-    guests  = manifest.guests
-    footer  = f"{manifest.event_name} Official Event Report - For {manifest.partner_name}"
+    # ── Locate all guest slides ───────────────────────────────────────────
+    # PRIMARY: table shape name "Table 3" + "Full Name" header text
+    guest_slides = find_slides_by_content(unpacked_dir, *_DETECT_PATTERNS)
+    if not guest_slides:
+        # FALLBACK: "GUEST DATA" section label text present on every guest slide
+        guest_slides = find_slides_by_content(unpacked_dir, *_FALLBACK_TEXT)
+
+    # ── Guest slides suppressed for this partner ──────────────────────────
+    if not manifest.include_guests:
+        return [], list(guest_slides)
+
+    guests = manifest.guests
+    footer = f"{manifest.event_abbrev or manifest.event_name} Official Event Report – Prepared For {manifest.partner_name}"
 
     if not guests:
         # Keep at least one slide (empty)
@@ -70,10 +90,10 @@ def edit(unpacked_dir: str, manifest: ReportManifest) -> tuple[list[str], list[s
                   for i in range(0, len(guests), ROWS_PER_PAGE)]
 
     needed    = max(1, len(chunks))
-    available = len(GUEST_SLIDES)
+    available = len(guest_slides)
 
-    kept_slides   = GUEST_SLIDES[:min(needed, available)]
-    delete_slides = GUEST_SLIDES[min(needed, available):]
+    kept_slides   = guest_slides[:min(needed, available)]
+    delete_slides = guest_slides[min(needed, available):]
 
     for i, slide_name in enumerate(kept_slides):
         xml = read_slide(unpacked_dir, slide_name)

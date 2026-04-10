@@ -49,8 +49,6 @@ Because this app isn't on the Mac App Store, macOS may block it the first time:
 
 Uses your `@theexoticsnetwork.com` Microsoft account — same one as Teams. Click **Sign In**, a browser window opens, you log in, browser closes, you're in.
 
-> **One-time Azure setup (account owner only):** See `AZURE_SETUP.md` — takes about 2 minutes.
-
 ---
 
 ## For developers

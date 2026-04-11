@@ -3,17 +3,62 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import EventFormFields from "@/components/events/event-form-fields";
-import { createEvent } from "../actions";
+import { updateEvent } from "../../actions";
 import {
-  EMPTY_EVENT_FORM,
+  emptyRoute,
   type EventFormState,
+  type EventRoute,
 } from "@/lib/event-parameters";
 
-function serialize(s: EventFormState) {
+interface EditEventFormProps {
+  event: {
+    id: string;
+    slug: string;
+    name: string;
+    startDate: string;
+    endDate: string;
+    venueName: string | null;
+    venueCity: string | null;
+    venueGoogleMapsUrl: string | null;
+    route: unknown;
+    totalCars: number | null;
+    totalPeople: number | null;
+    isDynamic: boolean;
+    hasPublicElement: boolean;
+    isRepeat: boolean;
+    isLocal: boolean;
+    status: string;
+  };
+}
+
+function toFormState(ev: EditEventFormProps["event"]): EventFormState {
+  const isMultiDay = ev.startDate !== ev.endDate;
+  return {
+    name: ev.name,
+    isMultiDay,
+    date: isMultiDay ? "" : ev.startDate,
+    startDate: isMultiDay ? ev.startDate : "",
+    endDate: isMultiDay ? ev.endDate : "",
+    venueName: ev.venueName ?? "",
+    venueCity: ev.venueCity ?? "",
+    venueGoogleMapsUrl: ev.venueGoogleMapsUrl ?? "",
+    totalCars: ev.totalCars != null ? String(ev.totalCars) : "",
+    totalPeople: ev.totalPeople != null ? String(ev.totalPeople) : "",
+    isDynamic: ev.isDynamic,
+    hasPublicElement: ev.hasPublicElement,
+    isRepeat: ev.isRepeat,
+    isLocal: ev.isLocal,
+    status: ev.status,
+    route: (ev.route as EventRoute) ?? emptyRoute(),
+  };
+}
+
+function serialize(s: EventFormState, slug: string) {
   const startDate = s.isMultiDay ? s.startDate : s.date;
   const endDate = s.isMultiDay ? s.endDate : s.date;
   return {
     name: s.name,
+    slug,
     startDate,
     endDate,
     venueName: s.venueName.trim() || null,
@@ -30,9 +75,9 @@ function serialize(s: EventFormState) {
   };
 }
 
-export default function NewEventPage() {
+export default function EditEventForm({ event }: EditEventFormProps) {
   const router = useRouter();
-  const [state, setState] = useState<EventFormState>({ ...EMPTY_EVENT_FORM });
+  const [state, setState] = useState<EventFormState>(() => toFormState(event));
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -44,12 +89,13 @@ export default function NewEventPage() {
     setSaving(true);
     setError(null);
     try {
-      const result = await createEvent(serialize(state));
+      const result = await updateEvent(event.id, serialize(state, event.slug));
       if (!result.ok) {
         setError(result.error ?? "Something went wrong");
         return;
       }
       router.push(`/events/${result.slug}`);
+      router.refresh();
     } finally {
       setSaving(false);
     }
@@ -61,14 +107,14 @@ export default function NewEventPage() {
         className="font-bebas tracking-wide leading-none mb-6"
         style={{ fontSize: "clamp(28px, 2.5vw, 38px)", color: "var(--text-1)" }}
       >
-        New Event
+        Edit Event
       </h1>
 
       <form
         onSubmit={handleSubmit}
         className="module-card p-6 max-w-[640px] flex flex-col gap-6"
       >
-        <EventFormFields state={state} onChange={patch} />
+        <EventFormFields state={state} onChange={patch} isEdit />
 
         {error && (
           <p style={{ fontSize: "12px", color: "#ef4444" }}>{error}</p>
@@ -80,7 +126,7 @@ export default function NewEventPage() {
           className="btn-primary w-full justify-center"
           style={{ padding: "12px 24px", fontSize: "13px" }}
         >
-          {saving ? "Creating..." : "Create Event"}
+          {saving ? "Saving..." : "Save Changes"}
         </button>
       </form>
     </div>

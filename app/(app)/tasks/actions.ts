@@ -8,6 +8,7 @@ import {
   taskBuckets,
   taskAssignees,
   taskChecklistItems,
+  timeEntries,
   activityLog,
   events,
   type NewTask,
@@ -536,6 +537,34 @@ export async function archiveTask(
     entityType: "task",
     entityId: taskId,
     action: "task_archived",
+    metadata: { name: shell.name },
+  });
+
+  const slug = await slugForEventId(shell.eventId);
+  revalidateTaskSurfaces(slug);
+  return { ok: true };
+}
+
+export async function deleteTask(
+  taskId: string,
+): Promise<ActionResult> {
+  const session = await requirePermission("tasks.create");
+
+  const shell = await loadTaskShell(taskId);
+  if (!shell) return { ok: false, error: "Task not found" };
+
+  // Delete related records first
+  await db.delete(taskChecklistItems).where(eq(taskChecklistItems.taskId, taskId));
+  await db.delete(taskAssignees).where(eq(taskAssignees.taskId, taskId));
+  await db.delete(timeEntries).where(eq(timeEntries.taskId, taskId));
+  await db.delete(tasks).where(eq(tasks.id, taskId));
+
+  await db.insert(activityLog).values({
+    id: generateId(),
+    userId: session.user!.id as string,
+    entityType: "task",
+    entityId: taskId,
+    action: "task_deleted",
     metadata: { name: shell.name },
   });
 

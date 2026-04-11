@@ -208,9 +208,14 @@ export const events = pgTable(
     startDate: date("start_date").notNull(),
     endDate: date("end_date").notNull(),
 
-    // Where
+    // Where (static events)
     venueName: text("venue_name"),
     venueCity: text("venue_city"),
+    venueGoogleMapsUrl: text("venue_google_maps_url"),
+
+    // Where (dynamic events — isDynamic = true)
+    // { start: { name, address?, googleMapsUrl }, stops: [...], end: { name, address?, googleMapsUrl } }
+    route: jsonb("route"),
 
     // Parametric flags (task template engine reads these)
     totalCars: integer("total_cars"),

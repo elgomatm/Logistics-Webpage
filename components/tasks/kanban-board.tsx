@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useCallback } from "react";
+import { useRouter } from "next/navigation";
 import {
   DndContext,
   DragOverlay,
@@ -18,23 +19,60 @@ import {
   verticalListSortingStrategy,
 } from "@dnd-kit/sortable";
 import { useDroppable } from "@dnd-kit/core";
+import { ChevronDown, Plus } from "lucide-react";
 import TaskCard from "./task-card";
-import { moveTask } from "@/app/(app)/tasks/actions";
-import type { BucketWithTasksHydrated, HydratedTask } from "@/lib/task-ui-types";
+import { moveTask, createTask } from "@/app/(app)/tasks/actions";
+import type { BucketWithTasksHydrated, HydratedTask, EventOption } from "@/lib/task-ui-types";
 
 interface KanbanBoardProps {
   buckets: BucketWithTasksHydrated[];
+  events: EventOption[];
   onTaskClick: (taskId: string) => void;
 }
 
 function BucketColumn({
   bucket,
+  events,
   onTaskClick,
 }: {
   bucket: BucketWithTasksHydrated;
+  events: EventOption[];
   onTaskClick: (taskId: string) => void;
 }) {
+  const router = useRouter();
   const { setNodeRef, isOver } = useDroppable({ id: bucket.id });
+  const [showDone, setShowDone] = useState(false);
+  const [creating, setCreating] = useState(false);
+  const [showEventPicker, setShowEventPicker] = useState(false);
+
+  const activeTasks = bucket.tasks.filter((ht) => ht.task.progress !== "done");
+  const doneTasks = bucket.tasks.filter((ht) => ht.task.progress === "done");
+
+  const handleAddTask = async (eventId: string) => {
+    if (creating) return;
+    setCreating(true);
+    setShowEventPicker(false);
+    try {
+      const result = await createTask({
+        name: "New Task",
+        eventId,
+        bucketId: bucket.id,
+        priority: "medium",
+        progress: "not_started",
+        description: null,
+        reviewerId: null,
+        plannedStartDate: null,
+        dueDate: null,
+        estimatedSeconds: null,
+        assigneeIds: [],
+      });
+      if (result?.ok && result.data?.taskId) {
+        router.push(`/tasks/board?task=${result.data.taskId}`, { scroll: false });
+      }
+    } finally {
+      setCreating(false);
+    }
+  };
 
   return (
     <div
@@ -43,10 +81,8 @@ function BucketColumn({
     >
       {/* Column header */}
       <div
-        className="flex items-center gap-2.5 px-3 py-3 mb-3"
-        style={{
-          borderBottom: `2px solid ${bucket.color}`,
-        }}
+        className="flex items-center gap-2.5 px-3 py-3"
+        style={{ borderBottom: `2px solid ${bucket.color}` }}
       >
         <span
           style={{
@@ -75,24 +111,104 @@ function BucketColumn({
             marginLeft: "auto",
           }}
         >
-          {bucket.tasks.length}
+          {activeTasks.length}
         </span>
       </div>
 
-      {/* Sortable area */}
+      {/* Add Task button */}
+      <div className="relative px-1 py-2">
+        <button
+          type="button"
+          disabled={creating || events.length === 0}
+          onClick={() => {
+            if (events.length === 1) {
+              handleAddTask(events[0].id);
+            } else {
+              setShowEventPicker(!showEventPicker);
+            }
+          }}
+          className="flex items-center justify-center gap-1.5 w-full py-2 rounded-lg transition-colors duration-150"
+          style={{
+            fontSize: "11px",
+            fontWeight: 500,
+            color: "var(--text-3)",
+            background: "transparent",
+            border: "1px dashed var(--border-mid)",
+            cursor: creating ? "wait" : "pointer",
+          }}
+          onMouseEnter={(e) => {
+            e.currentTarget.style.borderColor = "rgba(var(--champ-rgb), 0.4)";
+            e.currentTarget.style.color = "var(--champagne)";
+            e.currentTarget.style.background = "rgba(var(--champ-rgb), 0.04)";
+          }}
+          onMouseLeave={(e) => {
+            e.currentTarget.style.borderColor = "var(--border-mid)";
+            e.currentTarget.style.color = "var(--text-3)";
+            e.currentTarget.style.background = "transparent";
+          }}
+        >
+          <Plus size={13} strokeWidth={2} />
+          {creating ? "Adding..." : "Add Task"}
+        </button>
+
+        {/* Event picker dropdown */}
+        {showEventPicker && events.length > 1 && (
+          <div
+            className="absolute top-full left-0 right-0 mt-1 rounded-xl overflow-hidden z-50"
+            style={{
+              background: "var(--surface)",
+              border: "1px solid var(--border-mid)",
+              boxShadow: "0 8px 24px rgba(0,0,0,0.3)",
+            }}
+          >
+            <p
+              className="px-3 py-2"
+              style={{
+                fontSize: "9px",
+                letterSpacing: "0.2em",
+                textTransform: "uppercase",
+                fontWeight: 500,
+                color: "var(--text-3)",
+                borderBottom: "1px solid var(--border)",
+              }}
+            >
+              Select Event
+            </p>
+            {events.map((ev) => (
+              <button
+                key={ev.id}
+                type="button"
+                onClick={() => handleAddTask(ev.id)}
+                className="flex items-center w-full px-3 py-2.5 text-left transition-colors duration-100"
+                style={{ fontSize: "12px", color: "var(--text-2)" }}
+                onMouseEnter={(e) =>
+                  (e.currentTarget.style.background = "rgba(var(--champ-rgb), 0.06)")
+                }
+                onMouseLeave={(e) =>
+                  (e.currentTarget.style.background = "transparent")
+                }
+              >
+                {ev.name}
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* Active tasks (sortable) */}
       <div
         ref={setNodeRef}
         className="flex flex-col gap-3 flex-1 rounded-lg p-1 transition-colors duration-150"
         style={{
           background: isOver ? "rgba(var(--champ-rgb), 0.04)" : "transparent",
-          minHeight: "100px",
+          minHeight: "60px",
         }}
       >
         <SortableContext
-          items={bucket.tasks.map((t) => t.task.id)}
+          items={activeTasks.map((t) => t.task.id)}
           strategy={verticalListSortingStrategy}
         >
-          {bucket.tasks.map((ht) => (
+          {activeTasks.map((ht) => (
             <TaskCard
               key={ht.task.id}
               task={ht}
@@ -101,11 +217,49 @@ function BucketColumn({
           ))}
         </SortableContext>
       </div>
+
+      {/* Collapsed completed tasks */}
+      {doneTasks.length > 0 && (
+        <div className="mt-2 px-1">
+          <button
+            type="button"
+            onClick={() => setShowDone(!showDone)}
+            className="flex items-center gap-2 w-full py-2 px-2 rounded-md transition-colors duration-100"
+            style={{ color: "var(--text-3)", fontSize: "10px", letterSpacing: "0.1em" }}
+            onMouseEnter={(e) => (e.currentTarget.style.background = "rgba(255,255,255,0.03)")}
+            onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
+          >
+            <ChevronDown
+              size={12}
+              strokeWidth={1.5}
+              style={{
+                transform: showDone ? "rotate(0deg)" : "rotate(-90deg)",
+                transition: "transform 0.15s ease",
+              }}
+            />
+            <span className="uppercase font-medium">
+              {doneTasks.length} completed
+            </span>
+          </button>
+
+          {showDone && (
+            <div className="flex flex-col gap-3 mt-1" style={{ opacity: 0.45 }}>
+              {doneTasks.map((ht) => (
+                <TaskCard
+                  key={ht.task.id}
+                  task={ht}
+                  onClick={() => onTaskClick(ht.task.id)}
+                />
+              ))}
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }
 
-export default function KanbanBoard({ buckets, onTaskClick }: KanbanBoardProps) {
+export default function KanbanBoard({ buckets, events, onTaskClick }: KanbanBoardProps) {
   const [activeTask, setActiveTask] = useState<HydratedTask | null>(null);
   const [localBuckets, setLocalBuckets] = useState(buckets);
 
@@ -145,13 +299,11 @@ export default function KanbanBoard({ buckets, onTaskClick }: KanbanBoardProps) 
     const activeResult = findTask(activeId);
     if (!activeResult) return;
 
-    // Determine target bucket
     let targetBucketId: string;
     const overResult = findTask(overId);
     if (overResult) {
       targetBucketId = overResult.bucketId;
     } else {
-      // Dropped on the bucket itself
       targetBucketId = overId;
     }
 
@@ -174,7 +326,7 @@ export default function KanbanBoard({ buckets, onTaskClick }: KanbanBoardProps) 
     });
   };
 
-  const handleDragEnd = async (event: DragEndEvent) => {
+  const handleDragEnd = (event: DragEndEvent) => {
     const { active, over } = event;
     setActiveTask(null);
 
@@ -183,11 +335,9 @@ export default function KanbanBoard({ buckets, onTaskClick }: KanbanBoardProps) 
     const activeId = active.id as string;
     const overId = over.id as string;
 
-    // Find current bucket
     const found = findTask(activeId);
     if (!found) return;
 
-    // Determine target bucket and position
     let targetBucketId: string;
     const overResult = findTask(overId);
     if (overResult) {
@@ -196,15 +346,14 @@ export default function KanbanBoard({ buckets, onTaskClick }: KanbanBoardProps) 
       targetBucketId = overId;
     }
 
-    // Calculate position
     const targetBucket = localBuckets.find((b) => b.id === targetBucketId);
     const tasksInTarget = targetBucket?.tasks ?? [];
     const overIndex = tasksInTarget.findIndex((ht) => ht.task.id === overId);
     const position =
       overIndex >= 0 ? (overIndex + 1) * 100 : (tasksInTarget.length + 1) * 100;
 
-    // Server action
-    await moveTask(activeId, targetBucketId, position);
+    // Fire and forget — don't block UI
+    moveTask(activeId, targetBucketId, position).catch(console.error);
   };
 
   return (
@@ -220,6 +369,7 @@ export default function KanbanBoard({ buckets, onTaskClick }: KanbanBoardProps) 
           <BucketColumn
             key={bucket.id}
             bucket={bucket}
+            events={events}
             onTaskClick={onTaskClick}
           />
         ))}

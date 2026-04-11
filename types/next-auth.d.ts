@@ -3,10 +3,13 @@ import { DefaultJWT } from "next-auth/jwt";
 
 declare module "next-auth" {
   interface Session extends DefaultSession {
-    /** Microsoft Graph API access token — available in API routes and server components */
     accessToken?: string;
-    /** Microsoft refresh token — used for server-side OneDrive access without active session */
     refreshToken?: string;
+    user: DefaultSession["user"] & {
+      id: string;
+      role: string;
+      avatarColor: string;
+    };
   }
 }
 
@@ -15,5 +18,8 @@ declare module "next-auth/jwt" {
     accessToken?: string;
     refreshToken?: string;
     expiresAt?: number;
+    dbUserId?: string;
+    role?: string;
+    avatarColor?: string;
   }
 }

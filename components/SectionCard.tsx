@@ -48,7 +48,7 @@ export default function SectionCard({
       const x = ((clientX - rect.left) / rect.width  * 100).toFixed(1) + "%";
       const y = ((clientY - rect.top)  / rect.height * 100).toFixed(1) + "%";
       glowRef.current.style.background =
-        `radial-gradient(circle at ${x} ${y}, rgba(201,169,110,0.20) 0%, rgba(201,169,110,0.05) 40%, transparent 65%)`;
+        `radial-gradient(circle at ${x} ${y}, rgba(var(--champ-rgb),0.20) 0%, rgba(var(--champ-rgb),0.05) 40%, transparent 65%)`;
     });
   }, [isActive]);
 

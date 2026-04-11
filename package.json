@@ -19,12 +19,19 @@
   },
   "dependencies": {
     "@azure/msal-node": "^5.1.2",
+    "@dnd-kit/core": "^6.3.1",
+    "@dnd-kit/sortable": "^10.0.0",
+    "@neondatabase/serverless": "^1.0.2",
     "@types/archiver": "^7.0.0",
+    "@vercel/blob": "^2.3.3",
     "archiver": "^7.0.1",
+    "drizzle-orm": "^0.45.2",
     "framer-motion": "^11.1.9",
     "lucide-react": "^0.383.0",
-    "react": "^18",
-    "react-dom": "^18"
+    "next": "^16.2.3",
+    "next-auth": "^5.0.0-beta.30",
+    "react": "^19.2.5",
+    "react-dom": "^19.2.5"
   },
   "devDependencies": {
     "@types/node": "^20",
@@ -33,6 +40,7 @@
     "@vitejs/plugin-react": "^4.7.0",
     "autoprefixer": "^10.0.1",
     "concurrently": "^9.2.1",
+    "drizzle-kit": "^0.31.10",
     "electron": "^34.0.0",
     "electron-builder": "^26.8.1",
     "postcss": "^8",

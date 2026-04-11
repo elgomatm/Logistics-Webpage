@@ -1,0 +1,2 @@
+export const BUCKET_POSITION_STEP = 1000;
+export const TASK_POSITION_STEP = 100;
